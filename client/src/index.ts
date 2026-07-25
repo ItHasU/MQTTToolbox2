@@ -1,23 +1,26 @@
 import { DagdaClient } from "@dagda/client/src/app";
-import { PageContainer } from "@dagda/client/src/components/container/container.component";
-import { Navbar } from "@dagda/client/src/components/navbar/navbar.component";
-import { EntitiesStatusComponent } from "@dagda/client/src/components/status/status.component";
 import { AppTypes } from "@mqtt-toolbox/shared/src/app/types";
 import { APP_CONTEXT_ADAPTER } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
 import { AppPages } from "./pages";
 import { StatusPage } from "./pages/status/status.page";
 
-// Referenced so the custom elements are registered before the page is parsed
-Navbar;
-PageContainer;
-EntitiesStatusComponent;
+// No custom element to reference here any more: the framework registers its
+// own, and index.html is down to <dagda-app> (Dagda specs/navigation.md §6.1).
 
 DagdaClient.start<AppTypes, AppPages>({
     title: "MQTT Toolbox",
     model: APP_MODEL,
     contextAdapter: APP_CONTEXT_ADAPTER,
+    brand: {
+        label: "MQTT Toolbox",
+        // A sigil, not the first letters of the name: "MQ" says nothing.
+        compact: "MQTT",
+        icon: "ph-broadcast"
+    },
+    // One page for now, so it stands on its own rather than under a section of
+    // one. Sections arrive with the pages that need them.
     pages: {
-        status: { order: 1, title: "Statut", constructor: StatusPage }
+        status: { title: "Statut", constructor: StatusPage, icon: "ph-gauge", menu: { order: 1 } }
     }
 });
