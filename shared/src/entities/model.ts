@@ -7,20 +7,20 @@ import { JSTypes } from "@dagda/shared/src/entities/tools/javascript.types";
  * Where a message comes from (FEATURES §2).
  *
  * The stored values are explicit and must never be renumbered: they are what
- * ends up in the database.
- *
- * TODO: convert to a declarative enumeration once the framework exposes one
- * (Dagda FEATURES §2). The labels below are what that declaration will carry,
- * and what the form generator will render.
+ * ends up in the database. The labels are what the status page and the form
+ * generator display, so no screen has to carry its own lookup table.
  */
-export const enum MessageSource {
+export const MESSAGE_SOURCE = EntitiesModel.enum({
     /** Received from the broker */
-    EXTERNAL = 1,
+    EXTERNAL: { value: 1, label: "Externe" },
     /** Published by a cron scenario or an automation */
-    AUTOMATION = 2,
+    AUTOMATION: { value: 2, label: "Automatisme" },
     /** Published by a user from the dashboard */
-    MANUAL = 3,
-}
+    MANUAL: { value: 3, label: "Manuel" },
+});
+
+/** Union of the values a message source can take */
+export type MessageSource = typeof MESSAGE_SOURCE.type;
 
 //#endregion
 
@@ -56,9 +56,9 @@ export const APP_MODEL = new EntitiesModel({
     TOPIC_NAME: {
         rawType: JSTypes.string
     },
-    MESSAGE_SOURCE: EntitiesModel.type<JSTypes.number, MessageSource>({
-        rawType: JSTypes.number
-    }),
+    // The enumeration declared above is itself a field type definition,
+    // so the same constant declares the values and types the column.
+    MESSAGE_SOURCE: MESSAGE_SOURCE,
 }, {
     /**
      * One row per topic ever seen.
