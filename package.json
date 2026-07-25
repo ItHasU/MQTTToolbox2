@@ -13,7 +13,7 @@
     "dev": "npm run db:up && npm run build && (npm run watch -w @mqtt-toolbox/client & npm run watch -w @mqtt-toolbox/server & npm run dev -w @mqtt-toolbox/server & wait)",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:up": "docker compose up -d --wait postgres",
+    "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down"
   },
   "devDependencies": {
