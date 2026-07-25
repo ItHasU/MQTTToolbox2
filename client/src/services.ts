@@ -4,7 +4,7 @@ import { PageHandler } from "@dagda/client/src/pages/handler";
 import { PageService } from "@dagda/client/src/pages/service";
 import { Dagda } from "@dagda/shared/src/dagda";
 import { buildConsoleLogService } from "@dagda/shared/src/tools/log";
-import { AppContextAdapter } from "@mqtt-toolbox/shared/src/entities/contexts";
+import { APP_CONTEXT_ADAPTER } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
 import { AppNotifications, SharedServices } from "@mqtt-toolbox/shared/src/services";
 import { StatusPage } from "./pages/status/status.page";
@@ -27,7 +27,7 @@ export function initServices(): void {
         // The type argument is what makes the application's own events
         // (brokerStateChanged) typed on both ends.
         notification: new ClientNotificationImpl<AppNotifications>(),
-        entities: buildClientEntitiesService(APP_MODEL, new AppContextAdapter()),
+        entities: buildClientEntitiesService(APP_MODEL, APP_CONTEXT_ADAPTER),
         pages: pageHandler
     });
 }

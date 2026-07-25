@@ -1,6 +1,6 @@
 import { asNamed } from "@dagda/shared/src/entities/tools/named";
 import { describe, expect, it } from "vitest";
-import { AppContextAdapter, AppContexts } from "./contexts";
+import { APP_CONTEXT_ADAPTER, AppContexts } from "./contexts";
 import { TopicId } from "./types";
 
 const topicId = (id: number): TopicId => asNamed(id);
@@ -10,7 +10,9 @@ const topic = (id: number): AppContexts => ({ type: "topic", options: { topicId:
 
 describe("AppContextAdapter", () => {
 
-    const adapter = new AppContextAdapter();
+    // The assertions below are unchanged from the hand-written adapter they
+    // replaced: they are what checks the framework helpers really cover the case.
+    const adapter = APP_CONTEXT_ADAPTER;
 
     describe("contextEquals", () => {
 
