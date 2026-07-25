@@ -10,11 +10,9 @@ async function main(): Promise<void> {
     APP_MODEL.validate();
 
     const app = new ServerApp({ ...DEFAULT_SERVER_PARAMS }, APP_MODEL, APP_CONTEXT_ADAPTER, APP_SETTINGS);
-    if (app.isGoogleStrategyConfigured) {
-        app.registerGoogleStrategy();
-    } else {
-        console.warn("No Google credentials configured, starting without any authentication strategy.");
-    }
+    // Nothing to register: local accounts are the only authentication mode
+    // (Dagda FEATURES §7). On an empty database the framework creates
+    // admin/admin and says so at startup.
 
     // A message that arrived but is still queued would otherwise be lost on a
     // container restart, which happens on every deployment.

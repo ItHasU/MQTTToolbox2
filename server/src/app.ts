@@ -3,7 +3,7 @@ import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
 import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { AppEntityTypes } from "@mqtt-toolbox/shared/src/entities/types";
 import { RequestOptions } from "@dagda/server/src/api";
-import { AbstractServerApp, PassportProfile } from "@dagda/server/src/app";
+import { AbstractServerApp } from "@dagda/server/src/app";
 import { Data } from "@dagda/shared/src/entities/tools/adapters";
 import { Migration } from "@dagda/server/src/sql/migrations";
 import { assertUnreachable } from "@dagda/shared/src/tools/asserts";
@@ -74,16 +74,6 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings> {
     }
 
     //#endregion
-
-    /** @inheritdoc */
-    protected override async _isUserValid(_profile: PassportProfile): Promise<boolean> {
-        // No account can be validated yet: local accounts, roles and the
-        // invitation flow are a later slice (Dagda FEATURES §7, ROADMAP 3).
-        // Until then the application starts with no authentication strategy
-        // registered, so this is never reached from a browser. Refusing is the
-        // only safe answer if a strategy were configured by hand.
-        return false;
-    }
 
     /** @inheritdoc */
     protected override async _fetch(context: AppContexts, _request: RequestOptions): Promise<Data<AppEntityTypes>> {
