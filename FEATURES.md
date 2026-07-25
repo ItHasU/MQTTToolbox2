@@ -125,14 +125,16 @@
   un automatisme.
   - Chaque appel doit avoir son propre délai d'attente : un service tiers lent ne
     doit pas consommer tout le budget d'exécution de l'automatisme (§5.4).
-- 🆕 **Magasin de secrets** : les jetons des services appelés sont stockés en base et
-  référencés par nom depuis le code (`secrets.get("pushover")`), jamais écrits en clair
-  dans l'automatisme.
-  - Gérés depuis l'UI par un administrateur ; une fois saisis, ils ne sont plus
-    relisibles en clair depuis l'interface.
-  - **Exclus de l'export de configuration** (§8) et du versionnement du code (§5.6).
-  - À prévoir : chiffrement au repos (donc une clé de chiffrement fournie au serveur
-    par variable d'environnement), et la trace de quel automatisme lit quel secret.
+- 🆕 **Secrets** : les jetons des services appelés sont référencés par nom depuis le
+  code (`secrets.get("pushover")`), jamais écrits en clair dans l'automatisme.
+  - Repose sur les **paramètres système marqués secrets, de visibilité `script`**
+    (Dagda §11.5) : ce n'est plus un magasin spécifique à MQTTToolbox, mais un
+    usage du framework.
+  - ⚠️ À trancher avec Dagda avant cette tranche : `secrets.get()` rend-il la valeur
+    en clair — auquel cas un automatisme peut l'exfiltrer par un appel HTTP sortant —
+    ou le framework réalise-t-il lui-même l'appel en y injectant le secret ?
+  - Reste à traiter ici : la trace de quel automatisme lit quel secret, et
+    l'exclusion des secrets du versionnement du code (§5.6).
 
 ### 5.4 Exécution & sécurité
 
@@ -268,11 +270,17 @@ C'est **la** fonctionnalité centrale de l'outil.
 
 ## 8. Page Réglages
 
-- ✅ Configuration MQTT : URL, clientId, mot de passe, liste des topics.
+- 🔄 Configuration MQTT : URL, clientId, mot de passe, liste des topics.
+  **Ce sont des paramètres système** (Dagda §11.5), pas des entités : ils ne sont lus
+  que par le serveur, et le mot de passe ne doit jamais descendre au navigateur —
+  en entité, il serait lisible depuis la console.
+  - Le formulaire d'édition est dérivé de la déclaration typée des paramètres.
+  - La reconnexion à chaud (§1) s'appuie sur la notification de changement du
+    framework, qui reprend le `Config.on("mqtt", …)` de la v1.
 - 🔄 Édition du tableau de bord depuis les réglages — à revoir avec le multi-dashboard.
 - 🆕 Import / export de la configuration complète (y compris automatismes et tableaux
   de bord), **secrets exclus** (§5.3) — l'import doit donc signaler les secrets manquants.
-- 🆕 Écran de gestion des secrets, réservé aux administrateurs (§5.3).
+- 🆕 Écran de gestion des paramètres et des secrets, réservé aux administrateurs.
 - 🆕 Test de connexion avant sauvegarde.
 
 ## 9. Synchronisation client ↔ serveur
@@ -301,8 +309,11 @@ C'est **la** fonctionnalité centrale de l'outil.
 ## 11. Configuration & persistance
 
 - 🔄 v1 : un unique fichier `config.json` (chemin par variable `CONFIG`), chargé en cache,
-  avec système de callbacks sur changement de valeur
-  → en v2, passer au **modèle d'entités Dagda** (base de données).
+  avec système de callbacks sur changement de valeur. En v2, il se scinde en deux :
+  - ce qui n'est lu que par le serveur (broker, secrets) → **paramètres système**
+    de Dagda (§11.5), qui reprend aussi le mécanisme de callbacks ;
+  - ce qui est manipulé depuis l'interface (tableaux de bord, scénarios cron,
+    automatismes, messages différés) → **entités** Dagda.
 - ⚠️ Conséquence : Dagda ne supporte que **PostgreSQL** (ni SQLite ni fichier).
   Le déploiement passe donc d'un conteneur autonome à un couple app + base,
   ce qui alourdit sensiblement une installation sur petite machine.
@@ -329,6 +340,16 @@ C'est **la** fonctionnalité centrale de l'outil.
 - ✅ Image Docker multi-architecture (amd64, arm64).
 - ✅ Fuseau horaire géré dans l'image Docker (important pour le cron et les automatismes).
 - 🔄 Passer de NX / jQuery / Bootstrap 4 à Dagda / web components.
-- 🆕 **Choix d'un design system** — sans Bootstrap. À trancher au niveau de Dagda,
-  pas de MQTTToolbox (couvre aussi le thème clair / sombre).
+- 🆕 **Design system unique** généré par Claude Design (Nocturne fourni en exemple),
+  en remplacement de Bootstrap. Vocabulaire de classes fixe : `.btn`, `.card`,
+  `.input`, `.field`, `.nav`, `.table`, `.dialog`, `.tag`, `.seg`, `.elev-*`.
+- 🆕 **Thèmes interchangeables** (mécanisme fourni par Dagda) : plusieurs thèmes
+  livrés avec l'application, l'utilisateur choisit le sien, son choix est mémorisé.
+  Le clair et le sombre sont deux thèmes distincts.
+  - À décider : lesquels sont livrés par défaut.
+  - Le HTML des tableaux de bord (§6) emploie les mêmes classes et jetons que
+    le reste de l'interface : il suit le thème actif sans traitement particulier.
+    À documenter dans le guide utilisateur des tableaux de bord.
+  - ⚠️ Le `styles.css` généré importe ses polices depuis Google Fonts : à rapatrier
+    localement, l'outil devant fonctionner sur un réseau sans accès Internet.
 - ❌ Service systemd (`mqtt-toolbox.service`) — Docker uniquement.
