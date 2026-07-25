@@ -3,6 +3,7 @@ import { SystemAPI } from "@dagda/shared/src/api/impl/system.api";
 import { BaseAppTypes } from "@dagda/shared/src/app/types";
 import { AppContexts } from "../entities/contexts";
 import { AppEntityTypes, AppFieldTypes } from "../entities/types";
+import { AppNotifications } from "../services";
 
 /** The contract both sides of the application compile against */
 export interface AppTypes extends BaseAppTypes {
@@ -10,4 +11,7 @@ export interface AppTypes extends BaseAppTypes {
     entities: AppEntityTypes;
     contexts: AppContexts;
     apis: SystemAPI & EntitiesAPI<AppContexts, AppEntityTypes>;
+    // Without this the notification service is typed on the framework
+    // events alone, and brokerStateChanged compiles as unknown.
+    events: AppNotifications;
 }
