@@ -1,6 +1,7 @@
 import { DEFAULT_SERVER_PARAMS } from "@dagda/server/src/app";
 import { APP_CONTEXT_ADAPTER } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
+import { APP_SETTINGS } from "@mqtt-toolbox/shared/src/settings";
 import { ServerApp } from "./app";
 
 async function main(): Promise<void> {
@@ -8,12 +9,22 @@ async function main(): Promise<void> {
     // the database (Dagda FEATURES §2).
     APP_MODEL.validate();
 
-    const app = new ServerApp({ ...DEFAULT_SERVER_PARAMS }, APP_MODEL, APP_CONTEXT_ADAPTER);
+    const app = new ServerApp({ ...DEFAULT_SERVER_PARAMS }, APP_MODEL, APP_CONTEXT_ADAPTER, APP_SETTINGS);
     if (app.isGoogleStrategyConfigured) {
         app.registerGoogleStrategy();
     } else {
         console.warn("No Google credentials configured, starting without any authentication strategy.");
     }
+
+    // A message that arrived but is still queued would otherwise be lost on a
+    // container restart, which happens on every deployment.
+    for (const signal of ["SIGINT", "SIGTERM"] as const) {
+        process.once(signal, () => {
+            console.log(`Received ${signal}, closing the broker connection...`);
+            app.stop().finally(() => process.exit(0));
+        });
+    }
+
     await app.listen();
 }
 

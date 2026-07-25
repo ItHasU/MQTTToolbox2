@@ -28,6 +28,12 @@ Le framework vit dans un **dépôt voisin**, référencé par des dépendances
 ```bash
 npm install
 cp .env.example .env
+
+# Obligatoire : protège les paramètres secrets au repos. Le serveur refuse
+# de démarrer sans, et la configuration du broker en contient un.
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+# → à reporter dans SECRET_KEY dans .env
+
 npm run dev            # base + broker + compilation continue + serveur
 ```
 
@@ -38,8 +44,42 @@ compile en continu. Le navigateur n'est pas rechargé automatiquement.
 |---|---|
 | `npm run build` | Compile les trois paquets |
 | `npm run typecheck` | Vérifie le typage |
-| `npm test` | Tests unitaires (Vitest) |
+| `npm test` | Tests unitaires (Vitest), dont ceux qui exigent PostgreSQL |
 | `npm run db:up` / `db:down` | Démarre / arrête base et broker |
 
 Les ports diffèrent de ceux du framework (base sur 5433) pour que les deux
 piles puissent tourner en même temps.
+
+## Configuration
+
+Deux niveaux, et la frontière compte (Dagda FEATURES §11.5) :
+
+- **Variables d'environnement** — uniquement l'amorçage : port, URL de base,
+  chaîne de connexion, clé de chiffrement. On ne peut pas lire en base de quoi
+  se connecter à la base.
+- **Paramètres système** — tout le reste, dont le broker. Stockés en base,
+  modifiables à chaud : changer l'URL du broker reconnecte sans redémarrage.
+
+L'écran d'édition attend les rôles (tranche 3). En attendant, les variables
+`MQTT_*` et `HISTORY_*` **amorcent** les paramètres au **premier** démarrage
+seulement. Ensuite la valeur stockée gagne, et le serveur le dit au démarrage :
+
+```
+Setting "mqtt.url": MQTT_URL is set but a value is already stored, the environment is ignored
+```
+
+Pour repartir de zéro sur un paramètre : `DELETE FROM system_settings WHERE
+"key" = 'mqtt.url'`.
+
+## Vérifier que la chaîne fonctionne
+
+```bash
+npm run dev
+docker compose exec mosquitto mosquitto_pub -t "home/kitchen/temp" -m "21.5"
+docker compose exec postgres psql -U mqtt -d mqtt \
+  -c 'SELECT t."name", m."payload" FROM data_messages m JOIN data_topics t ON t."id" = m."topicId"'
+```
+
+L'interface, elle, n'est pas encore atteignable : la porte d'authentification
+redirige tout vers `/login`, et aucune stratégie n'est enregistrée tant que les
+comptes locaux ne sont pas là (tranche 3).
