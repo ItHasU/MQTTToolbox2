@@ -1,0 +1,17 @@
+{
+  "name": "@mqtt-toolbox/shared",
+  "version": "2.0.0",
+  "description": "Contract shared between the client and the server",
+  "author": "Matthieu Aubry",
+  "license": "ISC",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w"
+  },
+  "dependencies": {
+    "@dagda/shared": "file:../../dagda/packages/shared"
+  },
+  "devDependencies": {
+    "@dagda/build": "file:../../dagda/packages/build"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@mqtt-toolbox/client",
+  "version": "2.0.0",
+  "description": "Browser side of MQTT Toolbox",
+  "author": "Matthieu Aubry",
+  "license": "ISC",
+  "scripts": {
+    "build": "webpack",
+    "watch": "webpack --watch"
+  },
+  "dependencies": {
+    "@dagda/client": "file:../../dagda/packages/client",
+    "@dagda/shared": "file:../../dagda/packages/shared",
+    "@mqtt-toolbox/shared": "*"
+  },
+  "devDependencies": {
+    "@dagda/build": "file:../../dagda/packages/build"
+  }
+}

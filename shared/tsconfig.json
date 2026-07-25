@@ -1,0 +1,17 @@
+{
+    "extends": "@dagda/build/tsconfig-base.json",
+    "compilerOptions": {
+        "baseUrl": ".",
+        "outDir": "./.tsc-build/",
+    },
+    "include": [
+        "./src/**/*.ts"
+    ],
+    // The framework lives in a sibling repository, linked by a file: dependency.
+    // Both repositories therefore have to sit next to each other on disk.
+    "references": [
+        {
+            "path": "../../dagda/packages/shared"
+        }
+    ]
+}

@@ -1,0 +1,33 @@
+# Development and test stack.
+# The database port differs from the framework's own compose file so both can
+# run side by side.
+
+services:
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${MQTT_DB_USER:-mqtt}
+      POSTGRES_PASSWORD: ${MQTT_DB_PASSWORD:-mqtt}
+      POSTGRES_DB: ${MQTT_DB_NAME:-mqtt}
+    ports:
+      - "${MQTT_DB_PORT:-5433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MQTT_DB_USER:-mqtt} -d ${MQTT_DB_NAME:-mqtt}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # A broker to develop against. Point MQTT_URL at your own to use another one.
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    ports:
+      - "${MQTT_BROKER_PORT:-1883}:1883"
+    command: ["mosquitto", "-c", "/mosquitto-no-auth.conf"]
+
+volumes:
+  postgres-data:
