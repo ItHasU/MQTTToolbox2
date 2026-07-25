@@ -8,6 +8,7 @@
 > - 🔄 existe en v1, à revoir / repenser
 > - 🆕 nouveau, à évaluer
 
+
 ---
 
 ## 1. Connexion MQTT (serveur)
@@ -41,8 +42,8 @@
 - ✅ Édition des scénarios et des tâches depuis l'interface (boîte de dialogue).
 - ✅ Prise en compte immédiate des modifications de configuration.
 - 🆕 Expression cron complète (ou au moins : dates, intervalles, « toutes les N minutes »).
-- 🆕 Décalage aléatoire / offset (ex. lever du soleil ± X minutes).
-- 🆕 Historique des déclenchements (quand une tâche s'est-elle réellement exécutée ?).
+- 🆕 Décalage aléatoire / offset (ex. lever du soleil ± X minutes). => Bof
+- 🆕 Historique des déclenchements (quand une tâche s'est-elle réellement exécutée ?). => Pas besoin si on a l'historique des messages, il suffit de stocker la source (externe, automatisme, manuel = utilisateur depuis le dashboard)
 - 🆕 Déclenchement manuel d'une tâche (bouton « exécuter maintenant »).
 
 ## 4. Tableau de bord personnalisable
@@ -54,8 +55,11 @@ C'est **la** fonctionnalité centrale de l'outil.
 - ✅ Raccourci clavier (`Ctrl+E`) pour ouvrir/fermer l'éditeur en superposition.
 - ✅ Sauvegarde et rechargement immédiat du tableau de bord.
 - 🔄 Un seul tableau de bord — 🆕 en supporter plusieurs (onglets / pages).
+- 🆕 Sur mobile, swipe entre chaque tableau de bord
+- 🔄 Permettre de distinguer les tableaux de bord des différents utilisateurs, permettre de partager les tableaux de bord
 - 🆕 Prévisualisation en direct pendant l'édition.
 - 🆕 Bibliothèque d'exemples / snippets insérables.
+- 🆕 Passer à Monaco Editor
 
 ### Composants web disponibles dans le tableau de bord
 
@@ -67,7 +71,7 @@ C'est **la** fonctionnalité centrale de l'outil.
 | `<mqtt-age topic="…" unit="…">` | Affiche l'ancienneté du dernier message, unité auto ou forcée |
 | `<mqtt-if topic="…" path="…" equals/not-equals="…">` | Affiche ou masque son contenu selon la valeur |
 
-- 🆕 Composant d'action : bouton / interrupteur qui **publie** un message.
+- 🆕 Composant d'action : bouton / interrupteur qui **publie** un message. => Non, je préfère qu'on garde une API Javascript
 - 🆕 Composant de graphique (nécessite l'historique).
 - 🆕 Composant de jauge / indicateur visuel.
 - 🆕 Formatage des valeurs (unités, décimales, table de correspondance).
@@ -77,7 +81,7 @@ C'est **la** fonctionnalité centrale de l'outil.
 
 - ✅ Tableau de tous les messages reçus : horodatage, topic, payload décodé.
 - ✅ Tableau des messages programmés, avec suppression unitaire.
-- ✅ Rafraîchissement manuel + rafraîchissement automatique toutes les 10 s.
+- ✅ Rafraîchissement manuel + rafraîchissement automatique toutes les 10 s. => A remplacer par un rafraîchissement en temps réel
 - 🆕 Recherche / filtre par topic.
 - 🆕 Tri par colonne.
 - 🆕 Vue arborescente des topics.
@@ -122,10 +126,10 @@ C'est **la** fonctionnalité centrale de l'outil.
 
 - ✅ Application web mono-page, navigation par pages (Dashboard / Statut / Cron / Réglages).
 - ✅ PWA installable (manifest, icônes, mode `minimal-ui`).
-- ✅ Image Docker multi-architecture (amd64, arm/v7 — Raspberry Pi).
-- ✅ Service systemd fourni (`mqtt-toolbox.service`).
+- ✅ Image Docker multi-architecture (amd64, arm64).
+- ✅ Service systemd fourni (`mqtt-toolbox.service`). => Plus besoin
 - ✅ Fuseau horaire géré dans l'image Docker (important pour le cron).
-- 🔄 Passer de NX / jQuery / Bootstrap 4 à Dagda / web components / Bootstrap 5.
+- 🔄 Passer de NX / jQuery / Bootstrap 4 à Dagda / web components / Bootstrap 5. => Supprimer Bootstrap 5
 - 🆕 Authentification (aucune en v1 — l'outil est supposé sur un réseau de confiance).
-  Dagda fournit Google OAuth2 ; prévoir aussi un mode sans authentification assumé.
-- 🆕 Thème sombre.
+  Dagda fournit Google OAuth2 ; ~~prévoir aussi un mode sans authentification assumé.~~
+- 🆕 ~~Thème sombre.~~ Choix d'un design system (fonctionnalité Dagda)
