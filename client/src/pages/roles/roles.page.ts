@@ -1,11 +1,12 @@
 import { actionCall } from "@dagda/client/src/actions";
 import { Ref } from "@dagda/client/src/components/abstract.webcomponent";
+import { DialogAction, openDialog } from "@dagda/client/src/components/dialog/dialog.component";
 import { showToast } from "@dagda/client/src/components/toast/toast.component";
 import { defaultFieldEditors, FieldEditor } from "@dagda/client/src/forms/editors";
 import { AbstractPageElement } from "@dagda/client/src/pages/abstract.page.element";
 import { DagdaActions } from "@dagda/shared/src/auth/actions";
 import { DAGDA_PERMISSIONS } from "@dagda/shared/src/auth/permissions";
-import { Role, RoleId } from "@dagda/shared/src/auth/types";
+import { Role } from "@dagda/shared/src/auth/types";
 import { EntitiesModel } from "@dagda/shared/src/entities/model";
 import { JSTypes } from "@dagda/shared/src/entities/tools/javascript.types";
 import template from "./roles.page.html";
@@ -14,34 +15,36 @@ const PERMISSION_KEYS = Object.keys(DAGDA_PERMISSIONS) as (keyof typeof DAGDA_PE
 const BOOLEAN_TYPE = EntitiesModel.type({ rawType: JSTypes.boolean });
 const STRING_TYPE = EntitiesModel.type({ rawType: JSTypes.string });
 
-/**
- * One boolean editor per declared permission, keyed for reading back a
- * selection — built through the registry (Dagda FEATURES §8.1), not
- * `document.createElement("dagda-field-boolean")`: a browser refuses to
- * create a custom element that way once its constructor has added children,
- * which every Dagda editor's constructor does (it renders its own template).
- */
-function buildPermissionCheckboxes(current: string[]): Map<string, FieldEditor<boolean>> {
-    const editors = new Map<string, FieldEditor<boolean>>();
-    for (const key of PERMISSION_KEYS) {
-        const editor = defaultFieldEditors.createEditor(BOOLEAN_TYPE) as FieldEditor<boolean>;
-        editor.value = current.includes(key);
-        editors.set(key, editor);
-    }
-    return editors;
+function booleanEditor(value: boolean): FieldEditor<boolean> {
+    const editor = defaultFieldEditors.createEditor(BOOLEAN_TYPE) as FieldEditor<boolean>;
+    editor.value = value;
+    return editor;
 }
 
-function selectedPermissions(editors: Map<string, FieldEditor<boolean>>): string[] {
-    return Array.from(editors.entries()).filter(([, editor]) => editor.value === true).map(([key]) => key);
+function textEditor(value: string): FieldEditor<string> {
+    const editor = defaultFieldEditors.createEditor(STRING_TYPE) as FieldEditor<string>;
+    editor.value = value;
+    return editor;
+}
+
+/** The native checkbox inside a boolean editor — the element that actually fires "change" */
+function checkboxInput(editor: FieldEditor<boolean>): HTMLInputElement {
+    return editor.querySelector("input")!;
 }
 
 /**
  * The role × permission matrix (Dagda FEATURES §7.1, ROADMAP tranche 3): one
- * row per role, one column per declared permission, editable in place.
+ * column per role, one row per declared permission, a checkbox at each
+ * intersection saved as soon as it is toggled.
  *
- * Built by hand from the form generator's default editors (§8.1), same as
- * the publish page — a genuinely two-dimensional layout is not what
- * `<dagda-form>`'s flat field list is for.
+ * Creating and deleting a role both happen from the column header — a role
+ * is fundamentally a column of this table, so that is where it is born and
+ * where it goes. Creation opens a dialog (Dagda FEATURES §8): the matrix has
+ * no room for a name field once there are several roles, and a role without
+ * one is not meaningful even for an instant. Deletion asks for confirmation:
+ * it also clears the role from every account that carries it (the framework
+ * migration's `ON DELETE SET NULL`, not something this page does itself),
+ * which is worth a second thought before confirming.
  */
 export class RolesPage extends AbstractPageElement {
 
@@ -49,30 +52,11 @@ export class RolesPage extends AbstractPageElement {
     protected _head!: HTMLTableSectionElement;
     @Ref()
     protected _rows!: HTMLTableSectionElement;
-    @Ref("create-form")
-    protected _createForm!: HTMLFormElement;
-    @Ref("new-name")
-    protected _newName!: FieldEditor<string>;
-    @Ref("new-permissions")
-    protected _newPermissionsContainer!: HTMLElement;
 
     protected _roles: Role[] = [];
-    protected _newPermissionEditors!: Map<string, FieldEditor<boolean>>;
 
     constructor() {
         super({ template });
-    }
-
-    protected override async _init(): Promise<void> {
-        this._buildHead();
-
-        this._newPermissionEditors = buildPermissionCheckboxes([]);
-        this._renderPermissionEditors(this._newPermissionsContainer, this._newPermissionEditors);
-
-        this._createForm.addEventListener("submit", (event) => {
-            event.preventDefault();
-            this._createRole().catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
-        });
     }
 
     protected override async _refresh(): Promise<void> {
@@ -82,99 +66,149 @@ export class RolesPage extends AbstractPageElement {
             showToast(err instanceof Error ? err.message : String(err));
             return;
         }
+        this._renderHead();
         this._renderRows();
     }
 
-    protected _buildHead(): void {
+    protected _renderHead(): void {
         const row = document.createElement("tr");
-        const roleHeader = document.createElement("th");
-        roleHeader.textContent = "Rôle";
-        row.appendChild(roleHeader);
-        for (const key of PERMISSION_KEYS) {
+
+        const permissionHeader = document.createElement("th");
+        permissionHeader.textContent = "Permission";
+        row.appendChild(permissionHeader);
+
+        for (const role of this._roles) {
             const th = document.createElement("th");
-            th.textContent = DAGDA_PERMISSIONS[key].label;
-            th.title = DAGDA_PERMISSIONS[key].description ?? "";
+
+            const name = document.createElement("div");
+            name.textContent = role.name;
+            th.appendChild(name);
+
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "btn btn-ghost btn-icon";
+            remove.setAttribute("aria-label", `Supprimer le rôle « ${role.name} »`);
+            const removeIcon = document.createElement("i");
+            removeIcon.className = "ph ph-trash";
+            removeIcon.setAttribute("aria-hidden", "true");
+            remove.appendChild(removeIcon);
+            remove.addEventListener("click", () => this._confirmDelete(role));
+            th.appendChild(remove);
+
             row.appendChild(th);
         }
-        row.appendChild(document.createElement("th")); // actions
-        this._head.replaceChildren(row);
-    }
 
-    protected _renderPermissionEditors(container: HTMLElement, editors: Map<string, FieldEditor<boolean>>): void {
-        container.replaceChildren();
-        for (const key of PERMISSION_KEYS) {
-            const field = document.createElement("div");
-            field.className = "field";
-            const label = document.createElement("span");
-            label.className = "text-muted";
-            label.textContent = DAGDA_PERMISSIONS[key].label;
-            field.append(label, editors.get(key)!);
-            container.appendChild(field);
-        }
+        const create = document.createElement("th");
+        const createButton = document.createElement("button");
+        createButton.type = "button";
+        createButton.className = "btn btn-ghost btn-icon";
+        createButton.setAttribute("aria-label", "Créer un rôle");
+        const createIcon = document.createElement("i");
+        createIcon.className = "ph ph-plus";
+        createIcon.setAttribute("aria-hidden", "true");
+        createButton.appendChild(createIcon);
+        createButton.addEventListener("click", () => this._openCreateDialog());
+        create.appendChild(createButton);
+        row.appendChild(create);
+
+        this._head.replaceChildren(row);
     }
 
     protected _renderRows(): void {
         this._rows.replaceChildren();
-        for (const role of this._roles) {
+        for (const key of PERMISSION_KEYS) {
             const row = document.createElement("tr");
 
-            const nameCell = document.createElement("td");
-            const nameEditor = defaultFieldEditors.createEditor(STRING_TYPE) as FieldEditor<string>;
-            nameEditor.value = role.name;
-            nameCell.appendChild(nameEditor);
-            row.appendChild(nameCell);
+            const label = document.createElement("td");
+            label.textContent = DAGDA_PERMISSIONS[key].label;
+            label.title = DAGDA_PERMISSIONS[key].description ?? "";
+            row.appendChild(label);
 
-            const permissionEditors = buildPermissionCheckboxes(role.permissions);
-            for (const key of PERMISSION_KEYS) {
+            for (const role of this._roles) {
                 const cell = document.createElement("td");
-                cell.appendChild(permissionEditors.get(key)!);
+                const editor = booleanEditor(role.permissions.includes(key));
+                checkboxInput(editor).addEventListener("change", () => {
+                    this._togglePermission(role, key, editor.value === true)
+                        .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+                });
+                cell.appendChild(editor);
                 row.appendChild(cell);
             }
 
-            const actionsCell = document.createElement("td");
-            const save = document.createElement("button");
-            save.type = "button";
-            save.className = "btn btn-primary";
-            save.textContent = "Enregistrer";
-            save.addEventListener("click", () => {
-                this._updateRole(role.id, nameEditor.value ?? role.name, selectedPermissions(permissionEditors))
-                    .catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
-            });
-            const remove = document.createElement("button");
-            remove.type = "button";
-            remove.className = "btn btn-ghost";
-            remove.textContent = "Supprimer";
-            remove.addEventListener("click", () => {
-                this._deleteRole(role.id).catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
-            });
-            actionsCell.append(save, remove);
-            row.appendChild(actionsCell);
-
+            row.appendChild(document.createElement("td")); // under the "+" column, nothing to show
             this._rows.appendChild(row);
         }
     }
 
-    protected async _createRole(): Promise<void> {
-        const name = this._newName.value?.trim() ?? "";
-        if (name === "") {
-            showToast("Le nom du rôle ne peut pas être vide.");
-            return;
+    protected async _togglePermission(role: Role, key: string, checked: boolean): Promise<void> {
+        const permissions = checked
+            ? [...role.permissions, key]
+            : role.permissions.filter(p => p !== key);
+        await actionCall<DagdaActions, "updateRole">("updateRole", { id: role.id, permissions });
+        await this.refresh();
+    }
+
+    protected _openCreateDialog(): void {
+        const body = document.createElement("div");
+
+        const nameField = document.createElement("div");
+        nameField.className = "field";
+        const nameLabel = document.createElement("label");
+        nameLabel.textContent = "Nom";
+        const nameEditor = textEditor("");
+        nameField.append(nameLabel, nameEditor);
+        body.appendChild(nameField);
+
+        const permissionEditors = new Map<string, FieldEditor<boolean>>();
+        for (const key of PERMISSION_KEYS) {
+            const field = document.createElement("div");
+            field.className = "field";
+            const permissionLabel = document.createElement("span");
+            permissionLabel.className = "text-muted";
+            permissionLabel.textContent = DAGDA_PERMISSIONS[key].label;
+            const editor = booleanEditor(false);
+            permissionEditors.set(key, editor);
+            field.append(permissionLabel, editor);
+            body.appendChild(field);
         }
-        await actionCall<DagdaActions, "createRole">("createRole", { name, permissions: selectedPermissions(this._newPermissionEditors) });
-        this._newName.value = "";
-        this._newPermissionEditors = buildPermissionCheckboxes([]);
-        this._renderPermissionEditors(this._newPermissionsContainer, this._newPermissionEditors);
-        await this.refresh();
+
+        const actions: DialogAction[] = [
+            { label: "Annuler" },
+            {
+                label: "Créer",
+                className: "btn-primary",
+                onClick: async () => {
+                    const name = nameEditor.value?.trim() ?? "";
+                    if (name === "") {
+                        throw new Error("Le nom du rôle ne peut pas être vide.");
+                    }
+                    const permissions = Array.from(permissionEditors.entries())
+                        .filter(([, editor]) => editor.value === true)
+                        .map(([key]) => key);
+                    await actionCall<DagdaActions, "createRole">("createRole", { name, permissions });
+                    await this.refresh();
+                }
+            }
+        ];
+        openDialog({ title: "Nouveau rôle", body, actions });
     }
 
-    protected async _updateRole(id: RoleId, name: string, permissions: string[]): Promise<void> {
-        await actionCall<DagdaActions, "updateRole">("updateRole", { id, name, permissions });
-        await this.refresh();
-    }
+    protected _confirmDelete(role: Role): void {
+        const body = document.createElement("p");
+        body.textContent = `Supprimer le rôle « ${role.name} » ? Les comptes qui le portent perdront ses permissions.`;
 
-    protected async _deleteRole(id: RoleId): Promise<void> {
-        await actionCall<DagdaActions, "deleteRole">("deleteRole", { id });
-        await this.refresh();
+        const actions: DialogAction[] = [
+            { label: "Annuler" },
+            {
+                label: "Supprimer",
+                className: "btn-primary",
+                onClick: async () => {
+                    await actionCall<DagdaActions, "deleteRole">("deleteRole", { id: role.id });
+                    await this.refresh();
+                }
+            }
+        ];
+        openDialog({ title: "Supprimer le rôle", body, actions });
     }
 
 }
