@@ -5,6 +5,7 @@ import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
 import { registerAppFieldEditors } from "./forms/defaults";
 import { AppPages } from "./pages";
 import { PublishPage } from "./pages/publish/publish.page";
+import { RolesPage } from "./pages/roles/roles.page";
 import { StatusPage } from "./pages/status/status.page";
 import { TopicHistoryPage } from "./pages/topic-history/topic-history.page";
 
@@ -37,6 +38,11 @@ DagdaClient.start<AppTypes, AppPages>({
         publish: { title: "Publier", constructor: PublishPage, icon: "ph-paper-plane-tilt", menu: { order: 2 }, autoRefresh: true },
         // Reached from a click on a topic in the status page, never listed:
         // no `menu` here (Dagda specs/navigation.md).
-        topicHistory: { title: "Historique du topic", constructor: TopicHistoryPage }
+        topicHistory: { title: "Historique du topic", constructor: TopicHistoryPage },
+        // Secondary group: framework-flavoured administration, same spot the
+        // future settings screen will take (Dagda specs/navigation.md §3.1).
+        // Gated server-side too (Dagda FEATURES §11.2) — hiding the entry is
+        // convenience, not the access check.
+        roles: { title: "Rôles", constructor: RolesPage, icon: "ph-shield-check", menu: { group: "secondary", order: 1 }, permission: "roles.manage" }
     }
 });

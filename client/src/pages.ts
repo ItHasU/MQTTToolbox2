@@ -1,4 +1,5 @@
 import { PublishPage } from "./pages/publish/publish.page";
+import { RolesPage } from "./pages/roles/roles.page";
 import { StatusPage } from "./pages/status/status.page";
 import { TopicHistoryPage } from "./pages/topic-history/topic-history.page";
 
@@ -11,4 +12,5 @@ export type AppPages = {
     "status": StatusPage;
     "topicHistory": TopicHistoryPage;
     "publish": PublishPage;
+    "roles": RolesPage;
 };
