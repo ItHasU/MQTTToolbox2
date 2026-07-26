@@ -1,8 +1,9 @@
 import { AbstractSQLRunner } from "@dagda/server/src/sql/runner";
 import { SettingsWriteService } from "@dagda/shared/src/settings/service";
 import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
+import { IngestedMessage } from "@mqtt-toolbox/shared/src/entities/events";
 import { APP_MODEL, MESSAGE_SOURCE, MessageSource } from "@mqtt-toolbox/shared/src/entities/model";
-import { TopicId } from "@mqtt-toolbox/shared/src/entities/types";
+import { TopicId, TopicName } from "@mqtt-toolbox/shared/src/entities/types";
 import { AppSettings } from "@mqtt-toolbox/shared/src/settings";
 import { BrokerMessage } from "./broker";
 
@@ -28,6 +29,13 @@ export interface MessageIngestorParams {
     settings: SettingsWriteService<AppSettings>["settings"];
     /** Tells the clients which contexts went stale */
     broadcast: (contexts: AppContexts[]) => void;
+    /**
+     * Tells the clients what was actually ingested (Dagda ROADMAP tranche
+     * 4) — `MQTT.on(topic, callback)`'s live-push mechanism, and the fast
+     * path for `lastMessages`/`<mqtt-value>` and friends. Optional: an app
+     * that hasn't built the dashboard feature yet has nothing to do with it.
+     */
+    onMessagesIngested?: (messages: IngestedMessage[]) => void;
     /**
      * How long messages accumulate before the clients are told.
      *
@@ -86,8 +94,13 @@ export class MessageIngestor {
     /** Writes are chained: two messages on an unknown topic must not both create it */
     protected _queue: Promise<void> = Promise.resolve();
 
-    /** Topics touched since the last notification */
-    protected _pending: Set<number> = new Set();
+    /**
+     * Topics touched since the last notification, each holding its latest
+     * message of the batch — only the latest matters for `messagesIngested`
+     * (a "current value" push, not a full history; the entity row itself is
+     * the history, FEATURES §2) and for `contextChanged`.
+     */
+    protected _pending: Map<number, IngestedMessage> = new Map();
     protected _notifyTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(params: MessageIngestorParams) {
@@ -174,7 +187,16 @@ export class MessageIngestor {
         });
 
         await this._prune(topicId);
-        this._scheduleNotify(topicId);
+        this._scheduleNotify({
+            topicId: topicId as TopicId,
+            topicName: message.topic as TopicName,
+            payload,
+            payloadIsBase64,
+            receivedAt,
+            retain: message.retain,
+            qos: message.qos,
+            source
+        });
     }
 
     /** @returns the id of a topic, creating the row the first time it is seen */
@@ -217,8 +239,11 @@ export class MessageIngestor {
 
     //#region Notifying -------------------------------------------------------
 
-    protected _scheduleNotify(topicId: number): void {
-        this._pending.add(topicId);
+    protected _scheduleNotify(message: IngestedMessage): void {
+        // Overwrites any earlier entry for the same topic in this batch —
+        // only the latest matters for messagesIngested (see the field
+        // comment on _pending).
+        this._pending.set(message.topicId, message);
         if (this._notifyTimer != null) {
             return;
         }
@@ -233,18 +258,18 @@ export class MessageIngestor {
         if (this._pending.size === 0) {
             return;
         }
-        // Only the contexts actually written. The topic list also goes stale,
-        // but that relation is declared once in the context adapter rather than
-        // repeated by every writer — see contexts.ts.
-        const contexts: AppContexts[] = [...this._pending].map((topicId) => ({
+        const messages = [...this._pending.values()];
+        // Only the contexts actually written. The topic list (and
+        // lastMessages, ROADMAP tranche 4) also go stale, but that relation
+        // is declared once in the context adapter rather than repeated by
+        // every writer — see contexts.ts.
+        const contexts: AppContexts[] = messages.map((message) => ({
             type: "topic",
-            // The brand is applied here rather than carried around: the id comes
-            // out of SQL as a plain number, and this is where it becomes one of
-            // the application's ids.
-            options: { topicId: topicId as TopicId }
+            options: { topicId: message.topicId }
         }));
         this._pending.clear();
         this._params.broadcast(contexts);
+        this._params.onMessagesIngested?.(messages);
     }
 
     //#endregion

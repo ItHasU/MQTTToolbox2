@@ -112,7 +112,12 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPrefe
         this._ingestor = new MessageIngestor({
             db: this._db,
             settings: this._settings.settings,
-            broadcast: (contexts) => this.broadcast("contextChanged", contexts)
+            broadcast: (contexts) => this.broadcast("contextChanged", contexts),
+            // The dashboard JS API's MQTT.on(topic, callback) (ROADMAP
+            // tranche 4, FEATURES §6.2) and <mqtt-value>/<mqtt-json>/etc.'s
+            // live updates ride on this, not on a fetch triggered by
+            // contextChanged: a value push, not a cache invalidation.
+            onMessagesIngested: (messages) => this.broadcast("messagesIngested", messages)
         });
 
         const ingestor = this._ingestor;
@@ -207,6 +212,16 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPrefe
                          WHERE d."id" = $1 AND (d."ownerId" = $2 OR s."userId" = $2)`,
                         dashboardId, userId
                     );
+                break;
+            }
+            case "lastMessages": {
+                // DISTINCT ON ("topicId") ... ORDER BY "topicId", "receivedAt"
+                // DESC: one row per topic, the newest. Same idea as _prune()'s
+                // retention query, but across every topic instead of one.
+                result.messages = await this._db.all(
+                    `SELECT DISTINCT ON ("topicId") * FROM ${MESSAGES} ORDER BY "topicId", "receivedAt" DESC`
+                );
+                result.topics = await this._db.all(`SELECT * FROM ${TOPICS} ORDER BY "name"`);
                 break;
             }
             default: {

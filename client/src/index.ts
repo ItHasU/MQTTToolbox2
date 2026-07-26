@@ -2,8 +2,11 @@ import { DagdaClient } from "@dagda/client/src/app";
 import { AppTypes } from "@mqtt-toolbox/shared/src/app/types";
 import { APP_CONTEXT_ADAPTER } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
+import { MqttApi } from "./dashboard/mqtt-api";
 import { registerAppFieldEditors } from "./forms/defaults";
 import { AppPages } from "./pages";
+import { DashboardPage } from "./pages/dashboard/dashboard.page";
+import "./styles/dashboard.css";
 import { PreferencesPage } from "./pages/preferences/preferences.page";
 import { PublishPage } from "./pages/publish/publish.page";
 import { RolesPage } from "./pages/roles/roles.page";
@@ -31,9 +34,24 @@ DagdaClient.start<AppTypes, AppPages>({
     // tranche 4) — the app's own list stays the framework's default
     // (nocturne/aurore), only the storage key is app-specific.
     themePreferenceKey: "ui.theme",
+    // The dashboard JS API (Dagda ROADMAP tranche 4, FEATURES §6.2) — one
+    // instance for the whole session, reachable via Dagda.get("mqtt") from
+    // any component, loaded lazily (ensureLoaded()) the first time a
+    // dashboard actually needs it rather than at bootstrap.
+    services: {
+        mqtt: new MqttApi()
+    },
     // One page in the menu for now, so it stands on its own rather than under
     // a section of one. Sections arrive with the pages that need them.
     pages: {
+        // "C'est la fonctionnalité centrale de l'outil" (FEATURES §6) — first
+        // in the menu, so it's the default page (PageHandler.getDefaultPageUID()
+        // is the first entry). No autoRefresh: it has its own editing mode
+        // (Ctrl+E), and a page mid-edit is not cheap to redraw out from under
+        // the user — live values inside a dashboard update on their own,
+        // through each component's own MqttApi subscription, not through the
+        // page's own _refresh().
+        dashboard: { title: "Tableaux de bord", constructor: DashboardPage, icon: "ph-squares-four", menu: { order: 0 } },
         // The status page redraws itself when a message changes the topic
         // list, rather than leaving that to the "à rafraîchir" indicator: a
         // handful of rows is cheap to redraw, and this is the screen the

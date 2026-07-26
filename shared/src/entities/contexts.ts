@@ -25,8 +25,17 @@ export type DashboardsContext = BaseContext<"dashboards", undefined>;
 /** One dashboard, for the editor. */
 export type DashboardContext = BaseContext<"dashboard", { dashboardId: DashboardId }>;
 
+/**
+ * The last message of every topic (Dagda ROADMAP tranche 4) — a dashboard's
+ * whole initial state in one fetch, for `MQTT.get`/`getAll`/`list()`
+ * (FEATURES §6.2) and the components built on them. Distinct from `topics`:
+ * that one is names and dates only (the status page's shape), this one
+ * carries the payload every dashboard component actually reads.
+ */
+export type LastMessagesContext = BaseContext<"lastMessages", undefined>;
+
 /** List of all contexts */
-export type AppContexts = TopicsContext | TopicContext | DashboardsContext | DashboardContext;
+export type AppContexts = TopicsContext | TopicContext | DashboardsContext | DashboardContext | LastMessagesContext;
 
 //#endregion
 
@@ -56,12 +65,22 @@ export type AppContexts = TopicsContext | TopicContext | DashboardsContext | Das
  * the list carries enough (name, sort order) that any single dashboard's
  * change — a rename, a share granted or revoked — should be treated as
  * potentially stale for it too.
+ *
+ * `lastMessages` mirrors `topics` for the same reason `topics` itself does:
+ * a message on any topic can change what it holds, and a `topic` broadcast
+ * is a different context type it would otherwise never hear about. In
+ * practice `MessageIngestor` also fires `messagesIngested` (a push, not a
+ * cache invalidation) for the same event, which is the fast path a
+ * dashboard component actually uses (`ingest.ts`) — this relation is the
+ * correctness backstop for whoever fetched `lastMessages` without also
+ * subscribing to that event.
  */
 export const APP_CONTEXT_ADAPTER = buildContextAdapter<AppContexts>({
     topics: alsoIntersectsOtherTypes(alwaysIntersects()),
     topic: intersectsOnEqualOptions(),
     dashboards: alsoIntersectsOtherTypes(alwaysIntersects()),
-    dashboard: intersectsOnEqualOptions()
+    dashboard: intersectsOnEqualOptions(),
+    lastMessages: alsoIntersectsOtherTypes(alwaysIntersects())
 });
 
 //#endregion

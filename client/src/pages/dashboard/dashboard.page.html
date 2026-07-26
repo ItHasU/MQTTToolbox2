@@ -1,0 +1,38 @@
+<section class="dashboard-page">
+    <div class="dashboard-bar">
+        <div ref="tabs" class="dashboard-tabs" role="tablist" aria-label="Tableaux de bord">
+            <!-- One button per dashboard, built in TypeScript -->
+        </div>
+        <button ref="add" type="button" class="btn btn-ghost btn-icon" aria-label="Nouveau tableau de bord" title="Nouveau tableau de bord">
+            <i class="ph ph-plus" aria-hidden="true"></i>
+        </button>
+        <button ref="edit-toggle" type="button" class="btn btn-ghost btn-icon" aria-label="Éditer (Ctrl+E)" title="Éditer (Ctrl+E)">
+            <i class="ph ph-pencil-simple" aria-hidden="true"></i>
+        </button>
+    </div>
+
+    <p ref="empty" class="text-muted" hidden>Aucun tableau de bord. Utilisez « + » pour en créer un.</p>
+
+    <div ref="content" class="dashboard-content">
+        <!-- The current dashboard's rendered HTML -->
+    </div>
+
+    <div ref="editor-overlay" class="dashboard-editor-overlay" hidden data-no-swipe>
+        <div class="dashboard-editor-toolbar">
+            <input ref="name-input" type="text" class="input dashboard-name-input" placeholder="Nom du tableau de bord">
+            <button ref="share" type="button" class="btn btn-ghost">Partager</button>
+            <button ref="delete" type="button" class="btn btn-ghost">Supprimer</button>
+            <button ref="save" type="button" class="btn btn-primary">Enregistrer</button>
+            <button ref="close-editor" type="button" class="btn btn-ghost">Fermer</button>
+        </div>
+        <div class="dashboard-editor-body">
+            <dagda-code-editor ref="editor" language="html"></dagda-code-editor>
+            <div ref="preview" class="dashboard-editor-preview">
+                <!-- Live preview, updated on every keystroke -->
+            </div>
+        </div>
+        <div ref="snippets" class="dashboard-snippets">
+            <!-- Static snippet list, built in TypeScript -->
+        </div>
+    </div>
+</section>

@@ -1,0 +1,117 @@
+/* Dashboards (Dagda ROADMAP tranche 4, FEATURES §6) — app-level rules, built
+   the same way the framework's own shell.css is: only var() from Dagda's
+   themes.css, no literal values, so this follows both themes for free. */
+
+.dashboard-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+}
+
+.dashboard-tabs {
+    display: flex;
+    gap: var(--space-2);
+    flex: 1 1 auto;
+    overflow-x: auto;
+}
+
+.dashboard-tab {
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-family: var(--font-body);
+    font-size: var(--font-size-control);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.dashboard-tab:hover {
+    background: var(--btn-ghost-bg-hover);
+}
+
+.dashboard-tab[aria-selected="true"] {
+    background: var(--color-neutral-800);
+    color: var(--color-text);
+    font-weight: var(--font-weight-strong);
+}
+
+/* No explicit z-index: Dagda's dialog/toast hosts (dagda-ui.css) are also
+   left at the implicit stacking level and mounted after the page content,
+   so plain DOM order already puts them above this overlay. An explicit
+   z-index here — any positive value, regardless of magnitude — would win
+   over their implicit one unconditionally (CSS stacking order always
+   paints positioned-with-z-index above position:auto siblings), burying
+   the share dialog behind Monaco the way it was before this fix. */
+.dashboard-editor-overlay {
+    position: fixed;
+    inset: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+}
+
+/* Same equal-specificity trap `.dialog-backdrop[hidden]` already needed
+   fixing for (Dagda dagda-ui.css): this rule's own `display: flex` loads
+   after the browser's default `[hidden] { display: none }` and wins at
+   equal specificity, so `hidden` alone does not actually hide it. */
+.dashboard-editor-overlay[hidden] {
+    display: none;
+}
+
+.dashboard-editor-toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.dashboard-name-input {
+    flex: 1 1 auto;
+}
+
+.dashboard-editor-body {
+    display: flex;
+    gap: var(--space-3);
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.dashboard-editor-body dagda-code-editor {
+    flex: 1 1 auto;
+}
+
+.dashboard-editor-preview {
+    flex: 0 0 30%;
+    overflow: auto;
+    padding: var(--space-3);
+    border: var(--hairline) solid var(--color-divider);
+    border-radius: var(--radius-md);
+}
+
+.dashboard-snippets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.dashboard-share-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    list-style: none;
+    margin: 0 0 var(--space-3);
+    padding: 0;
+}
+
+.dashboard-share-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+}

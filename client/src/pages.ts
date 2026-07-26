@@ -1,3 +1,4 @@
+import { DashboardPage } from "./pages/dashboard/dashboard.page";
 import { PreferencesPage } from "./pages/preferences/preferences.page";
 import { PublishPage } from "./pages/publish/publish.page";
 import { RolesPage } from "./pages/roles/roles.page";
@@ -12,6 +13,7 @@ import { UsersPage } from "./pages/users/users.page";
  * always its own implementations, and wiring them here was pure repetition.
  */
 export type AppPages = {
+    "dashboard": DashboardPage;
     "status": StatusPage;
     "topicHistory": TopicHistoryPage;
     "publish": PublishPage;
