@@ -6,6 +6,7 @@ import { registerAppFieldEditors } from "./forms/defaults";
 import { AppPages } from "./pages";
 import { PublishPage } from "./pages/publish/publish.page";
 import { RolesPage } from "./pages/roles/roles.page";
+import { SettingsPage } from "./pages/settings/settings.page";
 import { StatusPage } from "./pages/status/status.page";
 import { TopicHistoryPage } from "./pages/topic-history/topic-history.page";
 import { UsersPage } from "./pages/users/users.page";
@@ -45,6 +46,9 @@ DagdaClient.start<AppTypes, AppPages>({
         // Gated server-side too (Dagda FEATURES §11.2) — hiding the entry is
         // convenience, not the access check.
         roles: { title: "Rôles", constructor: RolesPage, icon: "ph-shield-check", menu: { group: "secondary", order: 1 }, permission: "roles.manage" },
-        users: { title: "Utilisateurs", constructor: UsersPage, icon: "ph-users", menu: { group: "secondary", order: 2 }, permission: "users.manage" }
+        users: { title: "Utilisateurs", constructor: UsersPage, icon: "ph-users", menu: { group: "secondary", order: 2 }, permission: "users.manage" },
+        // Écran d'édition des paramètres système (Dagda FEATURES §11.5,
+        // ROADMAP tranche 3) — last of the secondary group.
+        settings: { title: "Paramètres", constructor: SettingsPage, icon: "ph-sliders", menu: { group: "secondary", order: 3 }, permission: "settings.manage" }
     }
 });
