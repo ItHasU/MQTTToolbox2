@@ -1,7 +1,9 @@
 import { SettingsModel } from "@dagda/shared/src/settings/model";
+import { USERS_TABLE } from "@dagda/server/src/auth/users";
 import { SettingsStore } from "@dagda/server/src/settings/store";
 import { FRAMEWORK_MIGRATIONS } from "@dagda/server/src/sql/framework.migrations";
 import { applyMigrations } from "@dagda/server/src/sql/migrations";
+import { qi } from "@dagda/server/src/sql/schema";
 import { createTestDatabase, TestDatabase } from "@dagda/server/src/test/pg.fixture";
 import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { APP_MODEL, MESSAGE_SOURCE } from "@mqtt-toolbox/shared/src/entities/model";
@@ -277,9 +279,22 @@ describe.runIf(available)("Message ingestion", () => {
 
     describe("Recording a manual publish (ROADMAP tranche 2)", () => {
 
+        // sourceUserId is a real foreign key to system_users (Dagda FEATURES
+        // §12): recordManualPublish needs an account that actually exists.
+        let userId: number;
+
+        beforeEach(async () => {
+            const user = await db.runner.get<{ id: number }>(
+                `INSERT INTO ${qi(USERS_TABLE)} (${qi("login")}, ${qi("displayName")}, ${qi("password")}, ${qi("isSuperAdmin")})
+                 VALUES ($1, $2, $3, FALSE) RETURNING ${qi("id")}`,
+                "alice", "Alice", "irrelevant"
+            );
+            userId = user!.id;
+        });
+
         it("creates the topic the first time it is published to", async () => {
             const ingestor = await createIngestor();
-            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, 7);
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, userId);
             await ingestor.flush();
 
             const topics = await db.runner.all<{ name: string }>(`SELECT "name" FROM "${TOPICS}"`);
@@ -288,14 +303,14 @@ describe.runIf(available)("Message ingestion", () => {
 
         it("stores it as manual, attributed to whoever sent it", async () => {
             const ingestor = await createIngestor();
-            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: true, qos: 1 }, 7);
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: true, qos: 1 }, userId);
             await ingestor.flush();
 
             const row = await db.runner.get<{ source: number, sourceUserId: number, retain: boolean, qos: number, payload: string }>(
                 `SELECT * FROM "${MESSAGES}"`
             );
             expect(row?.source).toBe(MESSAGE_SOURCE.values.MANUAL);
-            expect(row?.sourceUserId).toBe(7);
+            expect(row?.sourceUserId).toBe(userId);
             expect(row?.retain).toBe(true);
             expect(row?.qos).toBe(1);
             expect(row?.payload).toBe("on");
@@ -307,7 +322,7 @@ describe.runIf(available)("Message ingestion", () => {
             // processed it" — comparing the two is the feature, so recording
             // only one on purpose would defeat it.
             const ingestor = await createIngestor();
-            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, 7);
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, userId);
             ingestor.ingest(message("home/lamp", "on"));
             await ingestor.flush();
 
@@ -321,7 +336,7 @@ describe.runIf(available)("Message ingestion", () => {
         it("counts against the same retention as any other message", async () => {
             await settings.set("history.messagesPerTopic", 1);
             const ingestor = await createIngestor();
-            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, 7);
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, userId);
             ingestor.ingest(message("home/lamp", "on"));
             await ingestor.flush();
 
@@ -330,7 +345,7 @@ describe.runIf(available)("Message ingestion", () => {
 
         it("broadcasts the topic, same as a received message", async () => {
             const ingestor = await createIngestor();
-            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, 7);
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, userId);
             await ingestor.flush();
 
             const topic = await db.runner.get<{ id: number }>(`SELECT "id" FROM "${TOPICS}"`);

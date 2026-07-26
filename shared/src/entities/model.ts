@@ -96,7 +96,7 @@ export const APP_MODEL = new EntitiesModel({
         qos: { type: "INTEGER" },
         source: { type: "MESSAGE_SOURCE" },
         /** Set when source is MANUAL: who published it (FEATURES §12) */
-        sourceUserId: { type: "USER_ID", optional: true },
+        sourceUserId: { type: "USER_ID", optional: true, referencesUsers: true },
     }
 });
 
