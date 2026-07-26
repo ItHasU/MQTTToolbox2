@@ -39,8 +39,11 @@ DagdaClient.start<AppTypes, AppPages>({
         // move the row on its own.
         publish: { title: "Publier", constructor: PublishPage, icon: "ph-paper-plane-tilt", menu: { order: 2 }, autoRefresh: true },
         // Reached from a click on a topic in the status page, never listed:
-        // no `menu` here (Dagda specs/navigation.md).
-        topicHistory: { title: "Historique du topic", constructor: TopicHistoryPage },
+        // no `menu` here (Dagda specs/navigation.md). `autoRefresh` so a
+        // message arriving on the open topic redraws the table itself,
+        // same reasoning as the status page — a handful of rows is cheap
+        // to redraw on every change.
+        topicHistory: { title: "Historique du topic", constructor: TopicHistoryPage, autoRefresh: true },
         // Secondary group: framework-flavoured administration, same spot the
         // future settings screen will take (Dagda specs/navigation.md §3.1).
         // Gated server-side too (Dagda FEATURES §11.2) — hiding the entry is
