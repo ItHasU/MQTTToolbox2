@@ -8,6 +8,7 @@ import { PublishPage } from "./pages/publish/publish.page";
 import { RolesPage } from "./pages/roles/roles.page";
 import { StatusPage } from "./pages/status/status.page";
 import { TopicHistoryPage } from "./pages/topic-history/topic-history.page";
+import { UsersPage } from "./pages/users/users.page";
 
 // No custom element to reference here any more: the framework registers its
 // own, and index.html is down to <dagda-app> (Dagda specs/navigation.md §6.1).
@@ -43,6 +44,7 @@ DagdaClient.start<AppTypes, AppPages>({
         // future settings screen will take (Dagda specs/navigation.md §3.1).
         // Gated server-side too (Dagda FEATURES §11.2) — hiding the entry is
         // convenience, not the access check.
-        roles: { title: "Rôles", constructor: RolesPage, icon: "ph-shield-check", menu: { group: "secondary", order: 1 }, permission: "roles.manage" }
+        roles: { title: "Rôles", constructor: RolesPage, icon: "ph-shield-check", menu: { group: "secondary", order: 1 }, permission: "roles.manage" },
+        users: { title: "Utilisateurs", constructor: UsersPage, icon: "ph-users", menu: { group: "secondary", order: 2 }, permission: "users.manage" }
     }
 });
