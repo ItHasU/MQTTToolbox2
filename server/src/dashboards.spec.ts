@@ -1,0 +1,230 @@
+import { RequestOptionsFromClient } from "@dagda/server/src/api";
+import { RoleStore } from "@dagda/server/src/auth/roles";
+import { UserStore } from "@dagda/server/src/auth/users";
+import { createTestDatabase, TEST_DB_URL, TestDatabase } from "@dagda/server/src/test/pg.fixture";
+import { UserInfo } from "@dagda/shared/src/auth/types";
+import { asNamed } from "@dagda/shared/src/entities/tools/named";
+import { OperationType, SQLOperation, SQLTransactionData } from "@dagda/shared/src/sql/transaction";
+import { afterEach, beforeEach, describe, expect, inject, it } from "vitest";
+import { ServerApp } from "./app";
+import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
+import { AppEntityTypes } from "@mqtt-toolbox/shared/src/entities/types";
+
+const available = inject("databaseAvailable");
+
+/**
+ * The exit gate of Dagda ROADMAP tranche 4: "deux utilisateurs, des tableaux
+ * de bord distincts, un tableau partagé, et rien qui fuite entre les deux" —
+ * checked here at both the fetch level (`_fetch`/`_submit`) and the
+ * notification level (`_notificationRecipients`). A real `ServerApp` is
+ * constructed against the isolated test schema, migrated, but never
+ * `listen()`s — no HTTP port, no broker connection — so `_fetch`/`_submit`/
+ * `_notificationRecipients` can be called directly, the same way the actual
+ * `/fetch` and `/submit` routes would.
+ */
+describe.runIf(available)("Dashboards — ownership and sharing", () => {
+
+    let db: TestDatabase;
+    let app: ServerApp;
+    let alice: UserInfo;
+    let bob: UserInfo;
+
+    beforeEach(async () => {
+        db = await createTestDatabase("dashboards");
+
+        const url = new URL(TEST_DB_URL);
+        url.searchParams.set("options", `-c search_path=${db.schema}`);
+        process.env["PORT"] = "0";
+        process.env["BASE_URL"] = "http://localhost";
+        process.env["DB_URL"] = url.toString();
+        // A settings encryption key is mandatory the moment a secret setting
+        // is declared (Dagda FEATURES §11.5) — mqtt.password is one. Must
+        // decode to exactly 32 bytes, unlike the session secret.
+        process.env["SECRET_KEY"] = "glUGBe5xyLTagSXb4SFa3oQBxeVoqVymDlqy9lDSEO0=";
+
+        // Dynamic imports, after the env vars above are set: the app's model
+        // and settings modules have no side effects reading them, but this
+        // keeps the dependency explicit rather than relying on import order.
+        const { APP_MODEL } = await import("@mqtt-toolbox/shared/src/entities/model");
+        const { APP_CONTEXT_ADAPTER } = await import("@mqtt-toolbox/shared/src/entities/contexts");
+        const { APP_SETTINGS } = await import("@mqtt-toolbox/shared/src/settings");
+        const { APP_PERMISSIONS } = await import("@mqtt-toolbox/shared/src/permissions");
+
+        app = new ServerApp({ staticFolder: "." }, APP_MODEL, APP_CONTEXT_ADAPTER, APP_SETTINGS, undefined, APP_PERMISSIONS);
+        await (app as unknown as { migrate: () => Promise<void> }).migrate();
+
+        const roles: RoleStore = (app as unknown as { _roles: RoleStore })._roles;
+        const users: UserStore = (app as unknown as { _users: UserStore })._users;
+        const editorRole = await roles.create({ name: "Editor", permissions: ["dashboards.edit"] });
+
+        // Both hold dashboards.edit: the exit gate is "two users, distinct
+        // dashboards, one shared" — both create their own.
+        const createdAlice = await users.create({ login: "alice", password: "hunter2" });
+        await users.setRole(createdAlice.id, editorRole.id);
+        alice = (await users.getById(createdAlice.id))!;
+
+        const createdBob = await users.create({ login: "bob", password: "hunter2" });
+        await users.setRole(createdBob.id, editorRole.id);
+        bob = (await users.getById(createdBob.id))!;
+    });
+
+    afterEach(async () => {
+        await db?.dispose();
+    });
+
+    /** Calls the real `_submit()` as if the client route had (request/response are unused beyond `.sessionID`, absent here on purpose) */
+    function submitAs(user: UserInfo, operations: SQLOperation<AppEntityTypes, keyof AppEntityTypes>[]) {
+        const options: RequestOptionsFromClient = {
+            type: "client",
+            request: {} as RequestOptionsFromClient["request"],
+            response: {} as RequestOptionsFromClient["response"],
+            user
+        };
+        const transactionData: SQLTransactionData<AppEntityTypes, AppContexts> = { operations, contexts: [] };
+        return (app as unknown as {
+            _submit: (t: SQLTransactionData<AppEntityTypes, AppContexts>, r: RequestOptionsFromClient) => Promise<{ updatedIds: Record<number, number> }>
+        })._submit(transactionData, options);
+    }
+
+    function fetchAs(user: UserInfo, context: AppContexts) {
+        const options: RequestOptionsFromClient = {
+            type: "client",
+            request: {} as RequestOptionsFromClient["request"],
+            response: {} as RequestOptionsFromClient["response"],
+            user
+        };
+        return (app as unknown as {
+            _fetch: (c: AppContexts, r: RequestOptionsFromClient) => Promise<{ dashboards?: { id: number, name: string }[] }>
+        })._fetch(context, options);
+    }
+
+    async function createDashboard(owner: UserInfo, name: string): Promise<number> {
+        const result = await submitAs(owner, [{
+            type: OperationType.INSERT,
+            options: { table: "dashboards", item: { id: -1, ownerId: owner.id, name, html: "<p>hi</p>", sortOrder: 0 } as never }
+        }]);
+        return result.updatedIds[-1]!;
+    }
+
+    async function shareWith(owner: UserInfo, dashboardId: number, recipient: UserInfo): Promise<void> {
+        await submitAs(owner, [{
+            type: OperationType.INSERT,
+            options: { table: "dashboard_shares", item: { id: -1, dashboardId, userId: recipient.id } as never }
+        }]);
+    }
+
+    it("never includes another user's private dashboard in a fetch", async () => {
+        await createDashboard(alice, "Alice's private board");
+        await createDashboard(bob, "Bob's private board");
+
+        const bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
+        expect(bobsView.dashboards?.map((d) => d.name)).toEqual(["Bob's private board"]);
+    });
+
+    it("includes a dashboard once it is shared, for the recipient only", async () => {
+        const dashboardId = await createDashboard(alice, "Alice's board");
+
+        let bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
+        expect(bobsView.dashboards).toEqual([]);
+
+        await shareWith(alice, dashboardId, bob);
+
+        bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
+        expect(bobsView.dashboards?.map((d) => d.name)).toEqual(["Alice's board"]);
+    });
+
+    it("rejects a write to a dashboard the caller does not own", async () => {
+        const dashboardId = await createDashboard(alice, "Alice's board");
+
+        await expect(submitAs(bob, [{
+            type: OperationType.UPDATE,
+            options: { table: "dashboards", id: asNamed(dashboardId), values: { name: "Hijacked" } }
+        }])).rejects.toThrow(/do not own/);
+    });
+
+    it("rejects creating a dashboard without dashboards.edit", async () => {
+        const users: UserStore = (app as unknown as { _users: UserStore })._users;
+        const carol = await users.create({ login: "carol", password: "hunter2" });
+        await expect(createDashboard(carol, "Carol tries anyway")).rejects.toThrow(/Missing permission/);
+    });
+
+    it("never trusts a client-sent owner id", async () => {
+        const dashboardId = await submitAs(alice, [{
+            type: OperationType.INSERT,
+            // Alice claims the dashboard belongs to Bob — must be overwritten.
+            options: { table: "dashboards", item: { id: -1, ownerId: bob.id, name: "x", html: "", sortOrder: 0 } as never }
+        }]).then((r) => r.updatedIds[-1]!);
+
+        const bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
+        expect(bobsView.dashboards?.some((d) => d.id === dashboardId)).toBe(false);
+        const alicesView = await fetchAs(alice, { type: "dashboards", options: undefined });
+        expect(alicesView.dashboards?.some((d) => d.id === dashboardId)).toBe(true);
+    });
+
+    describe("notification recipients", () => {
+
+        function notificationRecipients(transactionData: SQLTransactionData<AppEntityTypes, AppContexts>, user: UserInfo) {
+            const options: RequestOptionsFromClient = {
+                type: "client",
+                request: {} as RequestOptionsFromClient["request"],
+                response: {} as RequestOptionsFromClient["response"],
+                user
+            };
+            return (app as unknown as {
+                _notificationRecipients: (t: SQLTransactionData<AppEntityTypes, AppContexts>, r: RequestOptionsFromClient) => Promise<((u: UserInfo) => boolean) | undefined>
+            })._notificationRecipients(transactionData, options);
+        }
+
+        it("excludes an uninvolved user from a private dashboard's edit", async () => {
+            const dashboardId = await createDashboard(alice, "Private");
+
+            const filter = await notificationRecipients({
+                operations: [{ type: OperationType.UPDATE, options: { table: "dashboards", id: asNamed(dashboardId), values: { name: "renamed" } } }],
+                contexts: []
+            }, alice);
+
+            expect(filter).toBeDefined();
+            expect(filter!(bob)).toBe(false);
+            expect(filter!(alice)).toBe(true);
+        });
+
+        it("includes the recipient once a dashboard is shared", async () => {
+            const dashboardId = await createDashboard(alice, "Shared");
+            await shareWith(alice, dashboardId, bob);
+
+            const filter = await notificationRecipients({
+                operations: [{ type: OperationType.UPDATE, options: { table: "dashboards", id: asNamed(dashboardId), values: { name: "renamed" } } }],
+                contexts: []
+            }, alice);
+
+            expect(filter!(bob)).toBe(true);
+        });
+
+        it("excludes the recipient again once un-shared", async () => {
+            const dashboardId = await createDashboard(alice, "Shared then not");
+            await shareWith(alice, dashboardId, bob);
+
+            const shareRow = await (app as unknown as { _db: { get: (q: string, ...p: unknown[]) => Promise<{ id: number } | null> } })
+                ._db.get(`SELECT "id" FROM "data_dashboard_shares" WHERE "dashboardId" = $1 AND "userId" = $2`, dashboardId, bob.id);
+
+            await submitAs(alice, [{ type: OperationType.DELETE, options: { table: "dashboard_shares", id: asNamed(shareRow!.id) } }]);
+
+            const filter = await notificationRecipients({
+                operations: [{ type: OperationType.UPDATE, options: { table: "dashboards", id: asNamed(dashboardId), values: { name: "renamed" } } }],
+                contexts: []
+            }, alice);
+
+            expect(filter!(bob)).toBe(false);
+        });
+
+        it("does not filter a write to an unrelated table", async () => {
+            const filter = await notificationRecipients({
+                operations: [{ type: OperationType.INSERT, options: { table: "topics", item: { id: -1, name: "x" } as never } }],
+                contexts: []
+            }, alice);
+            expect(filter).toBeUndefined();
+        });
+
+    });
+
+});

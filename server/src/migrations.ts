@@ -1,6 +1,7 @@
 import { USERS_TABLE } from "@dagda/server/src/auth/users";
 import { Migration } from "@dagda/server/src/sql/migrations";
-import { qi } from "@dagda/server/src/sql/schema";
+import { getCreateTableStatement, qi } from "@dagda/server/src/sql/schema";
+import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
 
 /**
  * Schema history of the application.
@@ -63,6 +64,66 @@ export const APP_MIGRATIONS: Migration[] = [
                         FOREIGN KEY (${qi("sourceUserId")}) REFERENCES ${qi(USERS_TABLE)}(${qi("id")}) ON DELETE SET NULL;
                     END IF;
                 END $$`
+            );
+        }
+    },
+    {
+        id: "0005-dashboards",
+        up: async (tools) => {
+            // `IF NOT EXISTS`, not `tools.createTable()`: on a fresh database
+            // (any new install, and every test here) `0001-initial-schema`'s
+            // `createAllTables()` already created both tables, since it reads
+            // the model as it stands *today* — a plain `createTable()` here
+            // would collide with that. On a database that already ran 0001
+            // before this table existed in the model, this is the only thing
+            // that ever creates it. `getCreateTableStatement` is the same
+            // generator `createTable()` calls, just with the guard exposed.
+            await tools.run(getCreateTableStatement(APP_MODEL, "dashboards", { ifNotExists: true }));
+            await tools.run(getCreateTableStatement(APP_MODEL, "dashboard_shares", { ifNotExists: true }));
+
+            // Three foreign keys overridden by hand: the model can only
+            // declare `ON DELETE SET NULL` (`referencesUsers`) or plain
+            // `REFERENCES` with no action at all (`foreignTable`) — neither
+            // is right here. `ownerId`/`userId` are mandatory columns, so
+            // `SET NULL` would fail the delete outright rather than orphan
+            // the row; a share pointing at a deleted dashboard or account
+            // means nothing either way. `ON DELETE CASCADE` is correct for
+            // all three, same call already made for `system_preferences`.
+            // All three already carry a generator-added constraint under
+            // Postgres's default inline-REFERENCES name (`referencesUsers`
+            // or `foreignTable` — see the model), dropped first.
+            await tools.run(
+                `ALTER TABLE "data_dashboards"
+                 DROP CONSTRAINT IF EXISTS "data_dashboards_ownerId_fkey",
+                 ADD CONSTRAINT "data_dashboards_ownerId_fkey"
+                    FOREIGN KEY (${qi("ownerId")}) REFERENCES ${qi(USERS_TABLE)}(${qi("id")}) ON DELETE CASCADE`
+            );
+            await tools.run(
+                `ALTER TABLE "data_dashboard_shares"
+                 DROP CONSTRAINT IF EXISTS "data_dashboard_shares_dashboardId_fkey",
+                 ADD CONSTRAINT "data_dashboard_shares_dashboardId_fkey"
+                    FOREIGN KEY (${qi("dashboardId")}) REFERENCES "data_dashboards"(${qi("id")}) ON DELETE CASCADE`
+            );
+            await tools.run(
+                `ALTER TABLE "data_dashboard_shares"
+                 DROP CONSTRAINT IF EXISTS "data_dashboard_shares_userId_fkey",
+                 ADD CONSTRAINT "data_dashboard_shares_userId_fkey"
+                    FOREIGN KEY (${qi("userId")}) REFERENCES ${qi(USERS_TABLE)}(${qi("id")}) ON DELETE CASCADE`
+            );
+
+            // The composite uniqueness a (dashboardId, userId) primary key
+            // would have given for free — see the model's comment on why
+            // dashboard_shares has a synthetic id instead.
+            await tools.run(
+                `CREATE UNIQUE INDEX IF NOT EXISTS "data_dashboard_shares_dashboard_user" ON "data_dashboard_shares" (${qi("dashboardId")}, ${qi("userId")})`
+            );
+            // The whole point of the table: "what may this user see" is the
+            // query it exists to answer.
+            await tools.run(
+                `CREATE INDEX IF NOT EXISTS "data_dashboards_owner" ON "data_dashboards" (${qi("ownerId")})`
+            );
+            await tools.run(
+                `CREATE INDEX IF NOT EXISTS "data_dashboard_shares_user" ON "data_dashboard_shares" (${qi("userId")})`
             );
         }
     }

@@ -37,6 +37,12 @@ export const APP_MODEL = new EntitiesModel({
     MESSAGE_ID: {
         rawType: JSTypes.number
     },
+    DASHBOARD_ID: {
+        rawType: JSTypes.number
+    },
+    SHARE_ID: {
+        rawType: JSTypes.number
+    },
     // -- Base types ----------------------------------------------------------
     BOOLEAN: {
         rawType: JSTypes.boolean
@@ -97,6 +103,46 @@ export const APP_MODEL = new EntitiesModel({
         source: { type: "MESSAGE_SOURCE" },
         /** Set when source is MANUAL: who published it (FEATURES §12) */
         sourceUserId: { type: "USER_ID", optional: true, referencesUsers: true },
+    },
+
+    /**
+     * A dashboard: free-form HTML the owner authored, plus the web components
+     * of FEATURES §6.1 typed directly into it (Dagda ROADMAP tranche 4).
+     *
+     * `ownerId` is declared `referencesUsers: true` for the column type it
+     * buys (a real `INTEGER` matching `system_users.id` — a plain `USER_ID`
+     * field with neither marker stores as `DOUBLE PRECISION`, which Postgres
+     * refuses to use in a foreign key against an integer primary key). The
+     * `ON DELETE SET NULL` that marker also implies is wrong here — a
+     * dashboard's owner is mandatory (`NOT NULL`), so losing the account
+     * would fail the delete outright rather than orphan the row — so the
+     * migration overrides the constraint to `ON DELETE CASCADE` by hand (a
+     * dashboard has no meaning once its owner is gone, same call as
+     * `system_preferences.userId`).
+     */
+    dashboards: {
+        id: { type: "DASHBOARD_ID", identity: true },
+        ownerId: { type: "USER_ID", referencesUsers: true },
+        name: { type: "TEXT" },
+        html: { type: "TEXT" },
+        /** Position in the owner's swipeable list */
+        sortOrder: { type: "INTEGER" },
+    },
+
+    /**
+     * Who else may see a dashboard, beyond its owner (Dagda ROADMAP tranche
+     * 4). A synthetic `id`, not a composite `(dashboardId, userId)` primary
+     * key: the entities machinery assumes exactly one numeric identity column
+     * per table. The migration adds the `UNIQUE(dashboardId, userId)`
+     * constraint the composite key would otherwise have given for free, and
+     * overrides both foreign keys to `ON DELETE CASCADE` by hand, for the
+     * same reason as `dashboards.ownerId` above — a share row means nothing
+     * once either side of it is gone.
+     */
+    dashboard_shares: {
+        id: { type: "SHARE_ID", identity: true },
+        dashboardId: { type: "DASHBOARD_ID", foreignTable: "dashboards" },
+        userId: { type: "USER_ID", referencesUsers: true },
     }
 });
 

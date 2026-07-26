@@ -4,8 +4,12 @@ import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { AppEntityTypes } from "@mqtt-toolbox/shared/src/entities/types";
 import { RequestOptions } from "@dagda/server/src/api";
 import { AbstractServerApp } from "@dagda/server/src/app";
+import { hasPermission } from "@dagda/shared/src/auth/permissions";
+import { UserInfo } from "@dagda/shared/src/auth/types";
 import { Data } from "@dagda/shared/src/entities/tools/adapters";
+import { NotificationRecipientFilter } from "@dagda/shared/src/notification/abstract.notification.handler";
 import { Migration } from "@dagda/server/src/sql/migrations";
+import { OperationType, SQLTransactionData, SQLTransactionResult } from "@dagda/shared/src/sql/transaction";
 import { assertUnreachable } from "@dagda/shared/src/tools/asserts";
 import { PublishMessageParams, SchedulePublishParams } from "@mqtt-toolbox/shared/src/actions";
 import { AppSettings } from "@mqtt-toolbox/shared/src/settings";
@@ -19,6 +23,8 @@ import { PublishScheduler } from "./mqtt/scheduler";
 // by the compiler instead of at the first query.
 const TOPICS = APP_MODEL.getTableSqlName("topics");
 const MESSAGES = APP_MODEL.getTableSqlName("messages");
+const DASHBOARDS = APP_MODEL.getTableSqlName("dashboards");
+const DASHBOARD_SHARES = APP_MODEL.getTableSqlName("dashboard_shares");
 
 export class ServerApp extends AbstractServerApp<AppTypes, AppSettings> {
 
@@ -139,9 +145,18 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings> {
 
     //#endregion
 
-    /** @inheritdoc */
-    protected override async _fetch(context: AppContexts, _request: RequestOptions): Promise<Data<AppEntityTypes>> {
+    /**
+     * @inheritdoc
+     * `dashboards`/`dashboard` are filtered by `request.user.id` — owned or
+     * shared, never anything else (Dagda ROADMAP tranche 4: this is the
+     * fetch-level half of the exit gate, notification filtering in
+     * `_notificationRecipients()` below is the other). A `{type:"server"}`
+     * request has no user to scope by and is trusted by construction (the
+     * server's own internal reads, not a browser's) — everything is visible.
+     */
+    protected override async _fetch(context: AppContexts, request: RequestOptions): Promise<Data<AppEntityTypes>> {
         const result: Data<AppEntityTypes> = {};
+        const userId = request.type === "client" ? request.user.id : null;
         switch (context.type) {
             case "topics": {
                 // The status page shows every topic with the date of its last
@@ -158,11 +173,181 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings> {
                 );
                 break;
             }
+            case "dashboards": {
+                result.dashboards = userId == null
+                    ? await this._db.all(`SELECT * FROM ${DASHBOARDS} ORDER BY "sortOrder"`)
+                    : await this._db.all(
+                        `SELECT DISTINCT d.* FROM ${DASHBOARDS} d
+                         LEFT JOIN ${DASHBOARD_SHARES} s ON s."dashboardId" = d."id"
+                         WHERE d."ownerId" = $1 OR s."userId" = $1
+                         ORDER BY d."sortOrder"`,
+                        userId
+                    );
+                // The share rows for whichever of those dashboards the caller
+                // owns — needed to render "shared with: …" on their own
+                // dashboards, never on ones merely shared with them.
+                result.dashboard_shares = userId == null
+                    ? await this._db.all(`SELECT * FROM ${DASHBOARD_SHARES}`)
+                    : await this._db.all(
+                        `SELECT s.* FROM ${DASHBOARD_SHARES} s
+                         INNER JOIN ${DASHBOARDS} d ON d."id" = s."dashboardId"
+                         WHERE d."ownerId" = $1`,
+                        userId
+                    );
+                break;
+            }
+            case "dashboard": {
+                const dashboardId = context.options.dashboardId;
+                result.dashboards = userId == null
+                    ? await this._db.all(`SELECT * FROM ${DASHBOARDS} WHERE "id" = $1`, dashboardId)
+                    : await this._db.all(
+                        `SELECT DISTINCT d.* FROM ${DASHBOARDS} d
+                         LEFT JOIN ${DASHBOARD_SHARES} s ON s."dashboardId" = d."id"
+                         WHERE d."id" = $1 AND (d."ownerId" = $2 OR s."userId" = $2)`,
+                        dashboardId, userId
+                    );
+                break;
+            }
             default: {
                 assertUnreachable(context);
             }
         }
         return result;
+    }
+
+    /**
+     * @inheritdoc
+     * Enforces ownership on `dashboards`/`dashboard_shares` before the write
+     * runs — the other half of the fetch-level filtering above. A client
+     * cannot create a dashboard owned by someone else (the sent `ownerId` is
+     * overwritten with the caller's own id, never trusted), cannot write to a
+     * dashboard it doesn't own, and cannot create a share for a dashboard it
+     * doesn't own. Every other table is untouched, same posture as the
+     * framework default.
+     */
+    protected override async _submit(
+        transactionData: SQLTransactionData<AppEntityTypes, AppContexts>,
+        request: RequestOptions
+    ): Promise<SQLTransactionResult> {
+        if (request.type === "client") {
+            await this._checkDashboardWriteAccess(transactionData, request.user);
+        }
+        return super._submit(transactionData, request);
+    }
+
+    protected async _checkDashboardWriteAccess(
+        transactionData: SQLTransactionData<AppEntityTypes, AppContexts>,
+        user: UserInfo
+    ): Promise<void> {
+        for (const operation of transactionData.operations) {
+            if (operation.options.table === "dashboards") {
+                if (operation.type === OperationType.INSERT) {
+                    if (!hasPermission(user, "dashboards.edit")) {
+                        throw new Error("Missing permission: dashboards.edit");
+                    }
+                    // Never trust a client-sent owner: this is the actual
+                    // trust boundary the table exists to enforce. Cast: the
+                    // generic `TableName` behind `operation.options` was
+                    // already narrowed to "dashboards" by the check above,
+                    // but TS does not propagate that through the shared
+                    // `SQLOperation<Tables, keyof Tables>` union to `.item`.
+                    (operation.options.item as { ownerId: number }).ownerId = user.id;
+                } else if (!(await this._ownsDashboard(operation.options.id, user))) {
+                    throw new Error("You do not own this dashboard");
+                }
+            } else if (operation.options.table === "dashboard_shares") {
+                if (operation.type === OperationType.INSERT) {
+                    const item = operation.options.item as { dashboardId: number };
+                    if (!(await this._ownsDashboard(item.dashboardId, user))) {
+                        throw new Error("You do not own this dashboard");
+                    }
+                } else if (operation.type === OperationType.DELETE) {
+                    const share = await this._db.get<{ userId: number, ownerId: number }>(
+                        `SELECT s."userId" AS "userId", d."ownerId" AS "ownerId"
+                         FROM ${DASHBOARD_SHARES} s INNER JOIN ${DASHBOARDS} d ON d."id" = s."dashboardId"
+                         WHERE s."id" = $1`,
+                        operation.options.id
+                    );
+                    // The owner may revoke it; the recipient may leave it.
+                    const allowed = share != null && (user.isSuperAdmin || share.ownerId === user.id || share.userId === user.id);
+                    if (!allowed) {
+                        throw new Error("You may not remove this share");
+                    }
+                } else {
+                    throw new Error("A share cannot be updated, only created or deleted");
+                }
+            }
+        }
+    }
+
+    protected async _ownsDashboard(dashboardId: number, user: UserInfo): Promise<boolean> {
+        if (user.isSuperAdmin) {
+            return true;
+        }
+        const dashboard = await this._db.get<{ ownerId: number }>(
+            `SELECT "ownerId" AS "ownerId" FROM ${DASHBOARDS} WHERE "id" = $1`,
+            dashboardId
+        );
+        return dashboard != null && dashboard.ownerId === user.id;
+    }
+
+    /**
+     * @inheritdoc
+     * Every other write keeps the framework's default (open, `undefined`) —
+     * only `dashboards`/`dashboard_shares` are owned or shared, so only they
+     * need narrowing. Resolved before the write runs (called from
+     * `AbstractServerApp._submit()` ahead of the actual `submit()`), so a
+     * DELETE's rows are still readable when this asks who could see them.
+     */
+    protected override async _notificationRecipients(
+        transactionData: SQLTransactionData<AppEntityTypes, AppContexts>,
+        request: RequestOptions
+    ): Promise<NotificationRecipientFilter | undefined> {
+        const touchesDashboards = transactionData.operations.some(
+            (op) => op.options.table === "dashboards" || op.options.table === "dashboard_shares"
+        );
+        if (!touchesDashboards) {
+            return undefined;
+        }
+
+        const dashboardIds = new Set<number>();
+        for (const operation of transactionData.operations) {
+            if (operation.options.table === "dashboards" && operation.type !== OperationType.INSERT) {
+                dashboardIds.add(operation.options.id);
+            } else if (operation.options.table === "dashboard_shares") {
+                if (operation.type === OperationType.INSERT) {
+                    dashboardIds.add((operation.options.item as { dashboardId: number }).dashboardId);
+                } else if (operation.type === OperationType.DELETE) {
+                    const share = await this._db.get<{ dashboardId: number }>(
+                        `SELECT "dashboardId" AS "dashboardId" FROM ${DASHBOARD_SHARES} WHERE "id" = $1`,
+                        operation.options.id
+                    );
+                    if (share != null) {
+                        dashboardIds.add(share.dashboardId);
+                    }
+                }
+            }
+        }
+        // A brand-new dashboard (INSERT, no id assigned yet): nobody but its
+        // owner has ever seen it, and the owner's own session is excluded
+        // separately (self-echo) — there is nothing left to notify.
+        if (dashboardIds.size === 0) {
+            return () => false;
+        }
+
+        const allowed = new Set<number>();
+        for (const dashboardId of dashboardIds) {
+            const rows = await this._db.all<{ userId: number }>(
+                `SELECT "ownerId" AS "userId" FROM ${DASHBOARDS} WHERE "id" = $1
+                 UNION
+                 SELECT "userId" AS "userId" FROM ${DASHBOARD_SHARES} WHERE "dashboardId" = $1`,
+                dashboardId
+            );
+            for (const row of rows) {
+                allowed.add(row.userId);
+            }
+        }
+        return (user) => allowed.has(user.id);
     }
 
 }

@@ -5,7 +5,7 @@ import {
     intersectsOnEqualOptions
 } from "@dagda/shared/src/entities/tools/contexts";
 import { BaseContext } from "@dagda/shared/src/entities/types";
-import { TopicId } from "./types";
+import { DashboardId, TopicId } from "./types";
 
 //#region Fetch contexts ------------------------------------------------------
 
@@ -15,8 +15,18 @@ export type TopicsContext = BaseContext<"topics", undefined>;
 /** One topic with its full message history. */
 export type TopicContext = BaseContext<"topic", { topicId: TopicId }>;
 
+/**
+ * Every dashboard the caller may see — owned or shared with them — with its
+ * HTML content, plus the share rows for the ones they own (Dagda ROADMAP
+ * tranche 4). One fetch feeds the whole swipeable dashboard list.
+ */
+export type DashboardsContext = BaseContext<"dashboards", undefined>;
+
+/** One dashboard, for the editor. */
+export type DashboardContext = BaseContext<"dashboard", { dashboardId: DashboardId }>;
+
 /** List of all contexts */
-export type AppContexts = TopicsContext | TopicContext;
+export type AppContexts = TopicsContext | TopicContext | DashboardsContext | DashboardContext;
 
 //#endregion
 
@@ -41,10 +51,17 @@ export type AppContexts = TopicsContext | TopicContext;
  *
  * The relation is declared on one side only. The framework asks both sides and
  * keeps true if either says so, so the intersection stays symmetric.
+ *
+ * `dashboards`/`dashboard` mirror `topics`/`topic` exactly, same reasoning:
+ * the list carries enough (name, sort order) that any single dashboard's
+ * change — a rename, a share granted or revoked — should be treated as
+ * potentially stale for it too.
  */
 export const APP_CONTEXT_ADAPTER = buildContextAdapter<AppContexts>({
     topics: alsoIntersectsOtherTypes(alwaysIntersects()),
-    topic: intersectsOnEqualOptions()
+    topic: intersectsOnEqualOptions(),
+    dashboards: alsoIntersectsOtherTypes(alwaysIntersects()),
+    dashboard: intersectsOnEqualOptions()
 });
 
 //#endregion
