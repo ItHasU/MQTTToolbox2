@@ -1,4 +1,6 @@
+import { PublishPage } from "./pages/publish/publish.page";
 import { StatusPage } from "./pages/status/status.page";
+import { TopicHistoryPage } from "./pages/topic-history/topic-history.page";
 
 /**
  * The pages of the application: the only thing the framework cannot know.
@@ -7,4 +9,6 @@ import { StatusPage } from "./pages/status/status.page";
  */
 export type AppPages = {
     "status": StatusPage;
+    "topicHistory": TopicHistoryPage;
+    "publish": PublishPage;
 };

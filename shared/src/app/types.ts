@@ -1,6 +1,7 @@
 import { EntitiesAPI } from "@dagda/shared/src/api/impl/entities.api";
 import { SystemAPI } from "@dagda/shared/src/api/impl/system.api";
 import { BaseAppTypes } from "@dagda/shared/src/app/types";
+import { AppActions } from "../actions";
 import { AppContexts } from "../entities/contexts";
 import { AppEntityTypes, AppFieldTypes } from "../entities/types";
 import { AppNotifications } from "../services";
@@ -11,6 +12,7 @@ export interface AppTypes extends BaseAppTypes {
     entities: AppEntityTypes;
     contexts: AppContexts;
     apis: SystemAPI & EntitiesAPI<AppContexts, AppEntityTypes>;
+    actions: AppActions;
     // Without this the notification service is typed on the framework
     // events alone, and brokerStateChanged compiles as unknown.
     events: AppNotifications;

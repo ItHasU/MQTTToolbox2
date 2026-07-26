@@ -1,0 +1,55 @@
+<section>
+    <form ref="form">
+        <div class="field">
+            <label>Topic</label>
+            <dagda-field-text ref="topic"></dagda-field-text>
+        </div>
+        <div class="field">
+            <label>Message</label>
+            <dagda-field-text ref="payload"></dagda-field-text>
+        </div>
+        <div class="field">
+            <span class="text-muted">Retain</span>
+            <dagda-field-boolean ref="retain"></dagda-field-boolean>
+        </div>
+        <div class="field">
+            <label>QoS</label>
+            <dagda-field-enum ref="qos"></dagda-field-enum>
+        </div>
+
+        <div class="field">
+            <label>Quand</label>
+            <div class="seg" role="radiogroup" aria-label="Quand">
+                <label class="seg-opt">
+                    <input ref="mode-now" type="radio" name="mode" value="now" checked>
+                    Maintenant
+                </label>
+                <label class="seg-opt">
+                    <input ref="mode-later" type="radio" name="mode" value="later">
+                    Plus tard
+                </label>
+            </div>
+        </div>
+
+        <div ref="send-at-field" class="field" hidden>
+            <label>Envoyer le</label>
+            <mqtt-field-datetime ref="send-at"></mqtt-field-datetime>
+        </div>
+
+        <button ref="submit" type="submit" class="btn btn-primary">Publier</button>
+    </form>
+
+    <h2>Publications programmées</h2>
+    <p ref="pending-summary" class="text-muted"></p>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Topic</th>
+                <th>Message</th>
+                <th>Envoi prévu</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody ref="pending-rows"></tbody>
+    </table>
+</section>

@@ -1,5 +1,6 @@
 import { AbstractPageElement } from "@dagda/client/src/pages/abstract.page.element";
 import { Ref } from "@dagda/client/src/components/abstract.webcomponent";
+import { PageService } from "@dagda/client/src/pages/service";
 import { Dagda } from "@dagda/shared/src/dagda";
 import { EntitiesService } from "@dagda/shared/src/entities/service";
 import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
@@ -28,11 +29,22 @@ export class StatusPage extends AbstractPageElement {
         const topics = entities.getHandler().getItems("topics");
         this._summary.textContent = `${topics.length} topic(s)`;
 
-        this._rows.innerHTML = "";
+        this._rows.replaceChildren();
         for (const topic of topics) {
             const row = document.createElement("tr");
+
             const name = document.createElement("td");
-            name.textContent = topic.name;
+            const link = document.createElement("button");
+            link.type = "button";
+            link.className = "btn btn-ghost";
+            link.textContent = topic.name;
+            link.addEventListener("click", () => {
+                Dagda.get<PageService>("pages")
+                    .setPage("topicHistory", { "topic-id": String(topic.id) })
+                    .catch(console.error);
+            });
+            name.appendChild(link);
+
             const last = document.createElement("td");
             last.textContent = topic.lastMessageAt == null
                 ? "—"

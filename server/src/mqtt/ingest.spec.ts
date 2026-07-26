@@ -275,6 +275,70 @@ describe.runIf(available)("Message ingestion", () => {
 
     });
 
+    describe("Recording a manual publish (ROADMAP tranche 2)", () => {
+
+        it("creates the topic the first time it is published to", async () => {
+            const ingestor = await createIngestor();
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, 7);
+            await ingestor.flush();
+
+            const topics = await db.runner.all<{ name: string }>(`SELECT "name" FROM "${TOPICS}"`);
+            expect(topics.map(t => t.name)).toEqual(["home/lamp"]);
+        });
+
+        it("stores it as manual, attributed to whoever sent it", async () => {
+            const ingestor = await createIngestor();
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: true, qos: 1 }, 7);
+            await ingestor.flush();
+
+            const row = await db.runner.get<{ source: number, sourceUserId: number, retain: boolean, qos: number, payload: string }>(
+                `SELECT * FROM "${MESSAGES}"`
+            );
+            expect(row?.source).toBe(MESSAGE_SOURCE.values.MANUAL);
+            expect(row?.sourceUserId).toBe(7);
+            expect(row?.retain).toBe(true);
+            expect(row?.qos).toBe(1);
+            expect(row?.payload).toBe("on");
+        });
+
+        it("is a second, independent row from the broker's own echo of the same message", async () => {
+            // The whole point (per Matthieu): one row for "we handed it to the
+            // broker", a second, separate one for "the broker actually
+            // processed it" — comparing the two is the feature, so recording
+            // only one on purpose would defeat it.
+            const ingestor = await createIngestor();
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, 7);
+            ingestor.ingest(message("home/lamp", "on"));
+            await ingestor.flush();
+
+            const rows = await db.runner.all<{ source: number }>(`SELECT "source" FROM "${MESSAGES}"`);
+            expect(rows).toHaveLength(2);
+            expect(rows.map(r => r.source).sort()).toEqual(
+                [MESSAGE_SOURCE.values.EXTERNAL, MESSAGE_SOURCE.values.MANUAL].sort()
+            );
+        });
+
+        it("counts against the same retention as any other message", async () => {
+            await settings.set("history.messagesPerTopic", 1);
+            const ingestor = await createIngestor();
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, 7);
+            ingestor.ingest(message("home/lamp", "on"));
+            await ingestor.flush();
+
+            expect(await db.runner.all(`SELECT "id" FROM "${MESSAGES}"`)).toHaveLength(1);
+        });
+
+        it("broadcasts the topic, same as a received message", async () => {
+            const ingestor = await createIngestor();
+            ingestor.recordManualPublish("home/lamp", Buffer.from("on"), { retain: false, qos: 0 }, 7);
+            await ingestor.flush();
+
+            const topic = await db.runner.get<{ id: number }>(`SELECT "id" FROM "${TOPICS}"`);
+            expect(broadcasts).toEqual([[{ type: "topic", options: { topicId: topic!.id } }]]);
+        });
+
+    });
+
     describe("Telling the clients", () => {
 
         it("broadcasts the context of the topic that changed", async () => {

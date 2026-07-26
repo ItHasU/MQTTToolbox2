@@ -1,0 +1,27 @@
+<section>
+    <button ref="back" type="button" class="btn btn-ghost">
+        <i class="ph ph-arrow-left" aria-hidden="true"></i>
+        Statut
+    </button>
+    <h1 ref="title"></h1>
+
+    <form ref="quick-publish">
+        <div class="field">
+            <label>Publier un message sur ce topic</label>
+            <dagda-field-text ref="quick-payload"></dagda-field-text>
+        </div>
+        <button type="submit" class="btn btn-primary">Publier</button>
+    </form>
+
+    <p ref="summary" class="text-muted"></p>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Reçu le</th>
+                <th>Contenu</th>
+                <th>Origine</th>
+            </tr>
+        </thead>
+        <tbody ref="rows"></tbody>
+    </table>
+</section>

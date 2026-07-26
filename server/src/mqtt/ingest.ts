@@ -1,7 +1,7 @@
 import { AbstractSQLRunner } from "@dagda/server/src/sql/runner";
 import { SettingsWriteService } from "@dagda/shared/src/settings/service";
 import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
-import { APP_MODEL, MESSAGE_SOURCE } from "@mqtt-toolbox/shared/src/entities/model";
+import { APP_MODEL, MESSAGE_SOURCE, MessageSource } from "@mqtt-toolbox/shared/src/entities/model";
 import { TopicId } from "@mqtt-toolbox/shared/src/entities/types";
 import { AppSettings } from "@mqtt-toolbox/shared/src/settings";
 import { BrokerMessage } from "./broker";
@@ -103,12 +103,40 @@ export class MessageIngestor {
      * write. Use flush() to wait for what has been handed over.
      */
     public ingest(message: BrokerMessage, receivedAt: number = Date.now()): void {
+        this._enqueue(message.topic, () => this._store(message, receivedAt, MESSAGE_SOURCE.values.EXTERNAL, null));
+    }
+
+    /**
+     * Record that a message was handed to the broker for publication
+     * (MQTTToolbox FEATURES §3, ROADMAP tranche 2).
+     *
+     * A **second, independent row** from whatever `ingest()` later stores for
+     * the same message: this one is stamped the moment the broker accepted
+     * the publish, the other whenever — if ever — it actually comes back
+     * through the subscription. Comparing the two is the point: it is what
+     * shows a manual publish actually reached the broker and came back,
+     * rather than just that the button was clicked.
+     *
+     * Same fire-and-forget contract as `ingest()`: the publish itself already
+     * happened by the time this is called, so a failure to record it must not
+     * turn into a failure the user sees.
+     */
+    public recordManualPublish(topic: string, payload: Buffer, options: { retain: boolean, qos: number }, userId: number): void {
+        this._enqueue(topic, () => this._store(
+            { topic, payload, retain: options.retain, qos: options.qos },
+            Date.now(),
+            MESSAGE_SOURCE.values.MANUAL,
+            userId
+        ));
+    }
+
+    protected _enqueue(topic: string, store: () => Promise<void>): void {
         this._queue = this._queue
-            .then(() => this._store(message, receivedAt))
+            .then(store)
             .catch((error: Error) => {
                 // One message that cannot be stored must not stop the next one,
                 // nor take the server down.
-                this._log(`Failed to store a message on "${message.topic}": ${error.message}`);
+                this._log(`Failed to store a message on "${topic}": ${error.message}`);
             });
     }
 
@@ -129,15 +157,15 @@ export class MessageIngestor {
 
     //#region Storing ---------------------------------------------------------
 
-    protected async _store(message: BrokerMessage, receivedAt: number): Promise<void> {
+    protected async _store(message: BrokerMessage, receivedAt: number, source: MessageSource, sourceUserId: number | null): Promise<void> {
         const topicId = await this._getTopicId(message.topic);
         const { payload, payloadIsBase64 } = encodePayload(message.payload);
 
         await this._params.db.withTransaction(async (connection) => {
             await connection.run(
-                `INSERT INTO "${MESSAGES}" ("topicId", "receivedAt", "payload", "payloadIsBase64", "retain", "qos", "source")
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                topicId, receivedAt, payload, payloadIsBase64, message.retain, message.qos, MESSAGE_SOURCE.values.EXTERNAL
+                `INSERT INTO "${MESSAGES}" ("topicId", "receivedAt", "payload", "payloadIsBase64", "retain", "qos", "source", "sourceUserId")
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+                topicId, receivedAt, payload, payloadIsBase64, message.retain, message.qos, source, sourceUserId
             );
             await connection.run(
                 `UPDATE "${TOPICS}" SET "lastMessageAt" = $1 WHERE "id" = $2`,

@@ -86,6 +86,29 @@ export class BrokerConnection {
         return this._state;
     }
 
+    /**
+     * Publish a message (MQTTToolbox FEATURES §3).
+     *
+     * @throws if there is no live connection — a caller with something to
+     * tell the user (a toast, ROADMAP tranche 2) is better placed to decide
+     * how than this class is.
+     */
+    public publish(topic: string, payload: Buffer, options: { retain: boolean, qos: 0 | 1 | 2 }): Promise<void> {
+        const client = this._client;
+        if (client == null) {
+            return Promise.reject(new Error("Not connected to the broker"));
+        }
+        return new Promise((resolve, reject) => {
+            client.publish(topic, payload, options, (error) => {
+                if (error != null) {
+                    reject(error);
+                } else {
+                    resolve();
+                }
+            });
+        });
+    }
+
     //#region Lifecycle -------------------------------------------------------
 
     /** Connect, and keep the connection in step with the settings */
