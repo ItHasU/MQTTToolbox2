@@ -11,8 +11,10 @@ import { JSTypes } from "@dagda/shared/src/entities/tools/javascript.types";
  * The broker password is the reason the mechanism exists: stored as an entity it
  * would travel through the client cache and be readable from the console.
  *
- * `env` is the bootstrap path while the editing screen waits for the roles
- * (ROADMAP tranche 3). The variable seeds the setting on first run only.
+ * None of these are bootstrap (Dagda FEATURES §11.5): the server is already
+ * listening and connected to its own database by the time any of them is
+ * read, so none declares `env` — the editing screen (gated by `settings.manage`)
+ * is the only way to set them, starting from the `default` below.
  */
 export const APP_SETTINGS = new SettingsModel({
 
@@ -20,32 +22,28 @@ export const APP_SETTINGS = new SettingsModel({
         type: JSTypes.string,
         label: "URL du broker",
         description: "mqtt://hôte:1883, ou mqtts:// pour une connexion chiffrée.",
-        default: "mqtt://localhost:1883",
-        env: "MQTT_URL"
+        default: "mqtt://localhost:1883"
     },
 
     "mqtt.clientId": {
         type: JSTypes.string,
         label: "Identifiant client",
         description: "Identifie cette instance auprès du broker. Deux clients partageant un identifiant se déconnectent mutuellement.",
-        default: "mqtt-toolbox",
-        env: "MQTT_CLIENT_ID"
+        default: "mqtt-toolbox"
     },
 
     "mqtt.topics": {
         type: JSTypes.string,
         label: "Topics souscrits",
         description: "Séparés par des virgules. « # » souscrit à tout.",
-        default: "#",
-        env: "MQTT_TOPICS"
+        default: "#"
     },
 
     "mqtt.username": {
         type: JSTypes.string,
         label: "Utilisateur",
         description: "Vide si le broker n'exige pas d'authentification.",
-        default: "",
-        env: "MQTT_USERNAME"
+        default: ""
     },
 
     "mqtt.password": {
@@ -54,16 +52,14 @@ export const APP_SETTINGS = new SettingsModel({
         // Secret, so: encrypted at rest, never read back by the interface, and
         // refused at client visibility.
         secret: true,
-        default: "",
-        env: "MQTT_PASSWORD"
+        default: ""
     },
 
     "mqtt.enabled": {
         type: JSTypes.boolean,
         label: "Connexion active",
         description: "Décocher coupe la connexion sans perdre la configuration.",
-        default: true,
-        env: "MQTT_ENABLED"
+        default: true
     },
 
     /**
@@ -76,8 +72,7 @@ export const APP_SETTINGS = new SettingsModel({
         label: "Messages conservés par topic",
         description: "Les plus anciens sont supprimés au-delà. 0 conserve tout.",
         default: 1000,
-        visibility: SettingVisibility.client,
-        env: "HISTORY_MESSAGES_PER_TOPIC"
+        visibility: SettingVisibility.client
     }
 
 });
