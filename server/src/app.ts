@@ -12,6 +12,7 @@ import { Migration } from "@dagda/server/src/sql/migrations";
 import { OperationType, SQLTransactionData, SQLTransactionResult } from "@dagda/shared/src/sql/transaction";
 import { assertUnreachable } from "@dagda/shared/src/tools/asserts";
 import { PublishMessageParams, SchedulePublishParams } from "@mqtt-toolbox/shared/src/actions";
+import { AppPreferences } from "@mqtt-toolbox/shared/src/preferences";
 import { AppSettings } from "@mqtt-toolbox/shared/src/settings";
 import { APP_MIGRATIONS } from "./migrations";
 import { BrokerConnection, BrokerState } from "./mqtt/broker";
@@ -26,7 +27,7 @@ const MESSAGES = APP_MODEL.getTableSqlName("messages");
 const DASHBOARDS = APP_MODEL.getTableSqlName("dashboards");
 const DASHBOARD_SHARES = APP_MODEL.getTableSqlName("dashboard_shares");
 
-export class ServerApp extends AbstractServerApp<AppTypes, AppSettings> {
+export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPreferences> {
 
     /** Set by listen(), once the settings it reads have been loaded */
     protected _broker: BrokerConnection | null = null;
@@ -34,7 +35,7 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings> {
     /** Built in the constructor: scheduling a publish needs no broker, only firing one does (ROADMAP tranche 2) */
     protected readonly _scheduler: PublishScheduler;
 
-    public constructor(...args: ConstructorParameters<typeof AbstractServerApp<AppTypes, AppSettings>>) {
+    public constructor(...args: ConstructorParameters<typeof AbstractServerApp<AppTypes, AppSettings, AppPreferences>>) {
         super(...args);
         this._scheduler = new PublishScheduler({
             publish: (params, userId) => this._publishAndRecord(params, userId),

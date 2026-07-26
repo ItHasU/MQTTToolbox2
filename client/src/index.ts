@@ -4,6 +4,7 @@ import { APP_CONTEXT_ADAPTER } from "@mqtt-toolbox/shared/src/entities/contexts"
 import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
 import { registerAppFieldEditors } from "./forms/defaults";
 import { AppPages } from "./pages";
+import { PreferencesPage } from "./pages/preferences/preferences.page";
 import { PublishPage } from "./pages/publish/publish.page";
 import { RolesPage } from "./pages/roles/roles.page";
 import { SettingsPage } from "./pages/settings/settings.page";
@@ -26,6 +27,10 @@ DagdaClient.start<AppTypes, AppPages>({
         label: "MQTT Toolbox",
         icon: "ph-broadcast"
     },
+    // Theme choice, remembered per account (Dagda FEATURES §11.6, ROADMAP
+    // tranche 4) — the app's own list stays the framework's default
+    // (nocturne/aurore), only the storage key is app-specific.
+    themePreferenceKey: "ui.theme",
     // One page in the menu for now, so it stands on its own rather than under
     // a section of one. Sections arrive with the pages that need them.
     pages: {
@@ -51,7 +56,11 @@ DagdaClient.start<AppTypes, AppPages>({
         roles: { title: "Rôles", constructor: RolesPage, icon: "ph-shield-check", menu: { group: "secondary", order: 1 }, permission: "roles.manage" },
         users: { title: "Utilisateurs", constructor: UsersPage, icon: "ph-users", menu: { group: "secondary", order: 2 }, permission: "users.manage" },
         // Écran d'édition des paramètres système (Dagda FEATURES §11.5,
-        // ROADMAP tranche 3) — last of the secondary group.
-        settings: { title: "Paramètres", constructor: SettingsPage, icon: "ph-sliders", menu: { group: "secondary", order: 3 }, permission: "settings.manage" }
+        // ROADMAP tranche 3).
+        settings: { title: "Paramètres", constructor: SettingsPage, icon: "ph-sliders", menu: { group: "secondary", order: 3 }, permission: "settings.manage" },
+        // Préférences personnelles (Dagda FEATURES §11.6, ROADMAP tranche 4)
+        // — last of the secondary group. No permission: unlike settings,
+        // every account may read and write its own.
+        preferences: { title: "Préférences", constructor: PreferencesPage, icon: "ph-sliders-horizontal", menu: { group: "secondary", order: 4 } }
     }
 });

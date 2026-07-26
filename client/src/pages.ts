@@ -1,3 +1,4 @@
+import { PreferencesPage } from "./pages/preferences/preferences.page";
 import { PublishPage } from "./pages/publish/publish.page";
 import { RolesPage } from "./pages/roles/roles.page";
 import { SettingsPage } from "./pages/settings/settings.page";
@@ -17,4 +18,5 @@ export type AppPages = {
     "roles": RolesPage;
     "users": UsersPage;
     "settings": SettingsPage;
+    "preferences": PreferencesPage;
 };
