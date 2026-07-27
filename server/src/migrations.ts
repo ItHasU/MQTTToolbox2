@@ -126,5 +126,16 @@ export const APP_MIGRATIONS: Migration[] = [
                 `CREATE INDEX IF NOT EXISTS "data_dashboard_shares_user" ON "data_dashboard_shares" (${qi("userId")})`
             );
         }
+    },
+    {
+        id: "0006-dashboards-public",
+        up: async (tools) => {
+            // Review feedback: sharing moves from "owner picks one
+            // recipient" to "owner makes it public, everyone else opts in"
+            // — dashboard_shares is repurposed (see app.ts) from a share
+            // list the owner writes to an import list anyone may add
+            // themselves to, gated on this new column.
+            await tools.run(`ALTER TABLE "data_dashboards" ADD COLUMN IF NOT EXISTS "isPublic" BOOLEAN NOT NULL DEFAULT false`);
+        }
     }
 ];

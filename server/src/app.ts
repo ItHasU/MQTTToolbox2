@@ -188,18 +188,24 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPrefe
                 break;
             }
             case "dashboards": {
+                // Visibility (review feedback, superseding the original
+                // per-user share model): owned, or public AND imported. The
+                // isPublic check re-runs on every fetch — flipping a
+                // dashboard private is a live gate, not a one-time grant, so
+                // an existing importer loses access the moment it flips,
+                // even though their dashboard_shares row is untouched.
                 result.dashboards = userId == null
                     ? await this._db.all(`SELECT * FROM ${DASHBOARDS} ORDER BY "sortOrder"`)
                     : await this._db.all(
                         `SELECT DISTINCT d.* FROM ${DASHBOARDS} d
-                         LEFT JOIN ${DASHBOARD_SHARES} s ON s."dashboardId" = d."id"
-                         WHERE d."ownerId" = $1 OR s."userId" = $1
+                         LEFT JOIN ${DASHBOARD_SHARES} s ON s."dashboardId" = d."id" AND s."userId" = $1
+                         WHERE d."ownerId" = $1 OR (d."isPublic" = true AND s."userId" = $1)
                          ORDER BY d."sortOrder"`,
                         userId
                     );
-                // The share rows for whichever of those dashboards the caller
-                // owns — needed to render "shared with: …" on their own
-                // dashboards, never on ones merely shared with them.
+                // The import rows for whichever of those dashboards the
+                // caller owns — needed to render "imported by: …" on their
+                // own dashboards, never on ones merely imported by them.
                 result.dashboard_shares = userId == null
                     ? await this._db.all(`SELECT * FROM ${DASHBOARD_SHARES}`)
                     : await this._db.all(
@@ -216,9 +222,26 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPrefe
                     ? await this._db.all(`SELECT * FROM ${DASHBOARDS} WHERE "id" = $1`, dashboardId)
                     : await this._db.all(
                         `SELECT DISTINCT d.* FROM ${DASHBOARDS} d
-                         LEFT JOIN ${DASHBOARD_SHARES} s ON s."dashboardId" = d."id"
-                         WHERE d."id" = $1 AND (d."ownerId" = $2 OR s."userId" = $2)`,
+                         LEFT JOIN ${DASHBOARD_SHARES} s ON s."dashboardId" = d."id" AND s."userId" = $2
+                         WHERE d."id" = $1 AND (d."ownerId" = $2 OR (d."isPublic" = true AND s."userId" = $2))`,
                         dashboardId, userId
+                    );
+                break;
+            }
+            case "publicDashboards": {
+                // Feeds the "Parcourir" dialog: public dashboards the caller
+                // neither owns nor has already imported.
+                result.dashboards = userId == null
+                    ? []
+                    : await this._db.all(
+                        `SELECT d.* FROM ${DASHBOARDS} d
+                         WHERE d."isPublic" = true AND d."ownerId" != $1
+                           AND NOT EXISTS (
+                               SELECT 1 FROM ${DASHBOARD_SHARES} s
+                               WHERE s."dashboardId" = d."id" AND s."userId" = $1
+                           )
+                         ORDER BY d."sortOrder"`,
+                        userId
                     );
                 break;
             }
@@ -281,9 +304,18 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPrefe
                 }
             } else if (operation.options.table === "dashboard_shares") {
                 if (operation.type === OperationType.INSERT) {
-                    const item = operation.options.item as { dashboardId: number };
-                    if (!(await this._ownsDashboard(item.dashboardId, user))) {
-                        throw new Error("You do not own this dashboard");
+                    // Importing (review feedback, superseding the original
+                    // "owner shares with a specific user" model): anyone may
+                    // add themselves — never someone else — to a currently
+                    // public dashboard's importer list. No permission check:
+                    // viewing a shared dashboard has never needed one, same
+                    // as listUserNames().
+                    const item = operation.options.item as { dashboardId: number, userId: number };
+                    if (item.userId !== user.id) {
+                        throw new Error("You may only import a dashboard for yourself");
+                    }
+                    if (!(await this._isDashboardPublic(item.dashboardId))) {
+                        throw new Error("This dashboard is not public");
                     }
                 } else if (operation.type === OperationType.DELETE) {
                     const share = await this._db.get<{ userId: number, ownerId: number }>(
@@ -313,6 +345,14 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPrefe
             dashboardId
         );
         return dashboard != null && dashboard.ownerId === user.id;
+    }
+
+    protected async _isDashboardPublic(dashboardId: number): Promise<boolean> {
+        const dashboard = await this._db.get<{ isPublic: boolean }>(
+            `SELECT "isPublic" AS "isPublic" FROM ${DASHBOARDS} WHERE "id" = $1`,
+            dashboardId
+        );
+        return dashboard?.isPublic === true;
     }
 
     /**
@@ -361,10 +401,18 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPrefe
 
         const allowed = new Set<number>();
         for (const dashboardId of dashboardIds) {
+            // Mirrors the fetch-level visibility rule exactly: an importer
+            // of a dashboard that is no longer public must not keep
+            // receiving its live updates just because their dashboard_shares
+            // row is still there (they've already lost the ability to
+            // re-fetch it, so a stray notification would leak content they
+            // can no longer legitimately see through a fetch).
             const rows = await this._db.all<{ userId: number }>(
                 `SELECT "ownerId" AS "userId" FROM ${DASHBOARDS} WHERE "id" = $1
                  UNION
-                 SELECT "userId" AS "userId" FROM ${DASHBOARD_SHARES} WHERE "dashboardId" = $1`,
+                 SELECT s."userId" AS "userId" FROM ${DASHBOARD_SHARES} s
+                 INNER JOIN ${DASHBOARDS} d ON d."id" = s."dashboardId"
+                 WHERE s."dashboardId" = $1 AND d."isPublic" = true`,
                 dashboardId
             );
             for (const row of rows) {

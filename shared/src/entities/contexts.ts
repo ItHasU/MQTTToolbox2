@@ -26,6 +26,14 @@ export type DashboardsContext = BaseContext<"dashboards", undefined>;
 export type DashboardContext = BaseContext<"dashboard", { dashboardId: DashboardId }>;
 
 /**
+ * Public dashboards the caller does not own and has not yet imported
+ * (review feedback, ROADMAP tranche 4's sharing model reworked from
+ * "owner picks a recipient" to "owner publishes, everyone else opts in") —
+ * feeds the "Parcourir" dialog's list of importable dashboards.
+ */
+export type PublicDashboardsContext = BaseContext<"publicDashboards", undefined>;
+
+/**
  * The last message of every topic (Dagda ROADMAP tranche 4) — a dashboard's
  * whole initial state in one fetch, for `MQTT.get`/`getAll`/`list()`
  * (FEATURES §6.2) and the components built on them. Distinct from `topics`:
@@ -35,7 +43,7 @@ export type DashboardContext = BaseContext<"dashboard", { dashboardId: Dashboard
 export type LastMessagesContext = BaseContext<"lastMessages", undefined>;
 
 /** List of all contexts */
-export type AppContexts = TopicsContext | TopicContext | DashboardsContext | DashboardContext | LastMessagesContext;
+export type AppContexts = TopicsContext | TopicContext | DashboardsContext | DashboardContext | LastMessagesContext | PublicDashboardsContext;
 
 //#endregion
 
@@ -64,7 +72,9 @@ export type AppContexts = TopicsContext | TopicContext | DashboardsContext | Das
  * `dashboards`/`dashboard` mirror `topics`/`topic` exactly, same reasoning:
  * the list carries enough (name, sort order) that any single dashboard's
  * change — a rename, a share granted or revoked — should be treated as
- * potentially stale for it too.
+ * potentially stale for it too. `publicDashboards` gets the same treatment:
+ * an owner toggling `isPublic`, or anyone importing/leaving one, can change
+ * who belongs on that list.
  *
  * `lastMessages` mirrors `topics` for the same reason `topics` itself does:
  * a message on any topic can change what it holds, and a `topic` broadcast
@@ -80,7 +90,8 @@ export const APP_CONTEXT_ADAPTER = buildContextAdapter<AppContexts>({
     topic: intersectsOnEqualOptions(),
     dashboards: alsoIntersectsOtherTypes(alwaysIntersects()),
     dashboard: intersectsOnEqualOptions(),
-    lastMessages: alsoIntersectsOtherTypes(alwaysIntersects())
+    lastMessages: alsoIntersectsOtherTypes(alwaysIntersects()),
+    publicDashboards: alsoIntersectsOtherTypes(alwaysIntersects())
 });
 
 //#endregion

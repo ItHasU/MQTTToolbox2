@@ -1,4 +1,3 @@
-import { actionCall } from "@dagda/client/src/actions";
 import { Attribute, Ref } from "@dagda/client/src/components/abstract.webcomponent";
 import { DialogAction, openDialog } from "@dagda/client/src/components/dialog/dialog.component";
 import { showToast } from "@dagda/client/src/components/toast/toast.component";
@@ -7,7 +6,6 @@ import { AuthService } from "@dagda/client/src/auth/auth.service";
 import { AbstractPageElement } from "@dagda/client/src/pages/abstract.page.element";
 import { PageService } from "@dagda/client/src/pages/service";
 import { UsersService } from "@dagda/client/src/auth/service";
-import { DagdaActions } from "@dagda/shared/src/auth/actions";
 import { Dagda } from "@dagda/shared/src/dagda";
 import { EntitiesService } from "@dagda/shared/src/entities/service";
 import { asNamed } from "@dagda/shared/src/entities/tools/named";
@@ -52,6 +50,8 @@ export class DashboardPage extends AbstractPageElement {
     protected _tabs!: HTMLDivElement;
     @Ref()
     protected _add!: HTMLButtonElement;
+    @Ref()
+    protected _browse!: HTMLButtonElement;
     @Ref("edit-toggle")
     protected _editToggle!: HTMLButtonElement;
     @Ref()
@@ -92,6 +92,11 @@ export class DashboardPage extends AbstractPageElement {
     // a value typed in the gap before that fetch resolves was overwritten by
     // the server's still-old value the moment it landed.
     protected _loadedEditorId: number | null = null;
+    // Whether the editor may be opened at all for the currently selected
+    // dashboard — review feedback: the edit button must not be available
+    // with no dashboard to edit, and only the owner may open the editor for
+    // one at all (not just be blocked from saving once inside it).
+    protected _canEditCurrent = false;
 
     protected readonly _onKeyDown = (event: KeyboardEvent): void => {
         if (event.ctrlKey && event.key.toLowerCase() === "e") {
@@ -109,6 +114,7 @@ export class DashboardPage extends AbstractPageElement {
         (window as unknown as { MQTT: unknown }).MQTT = Dagda.get<MqttService>("mqtt");
 
         this._add.addEventListener("click", () => this._createDashboard().catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err))));
+        this._browse.addEventListener("click", () => this._openBrowseDialog().catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err))));
         this._editToggle.addEventListener("click", () => this._toggleEditor());
         this._share.addEventListener("click", () => this._openShareDialog());
         this._delete.addEventListener("click", () => this._confirmDelete());
@@ -157,6 +163,9 @@ export class DashboardPage extends AbstractPageElement {
 
         const current = dashboards.find((d) => d.id === this._currentId) ?? null;
         this._renderHtml(this._content, current?.html ?? "");
+
+        this._canEditCurrent = current != null && this._isOwner(current);
+        this._editToggle.toggleAttribute("disabled", !this._canEditCurrent);
 
         if (this._editing) {
             this._applyEditorPermission(current);
@@ -283,7 +292,11 @@ export class DashboardPage extends AbstractPageElement {
     protected _toggleEditor(): void {
         if (this._editing) {
             this._closeEditorOverlay();
-        } else {
+        } else if (this._canEditCurrent) {
+            // Guards Ctrl+E too, not just the toolbar button's own `disabled`
+            // attribute (which only stops a click) — only the owner may open
+            // the editor for a dashboard at all (review feedback), and there
+            // must be a dashboard to edit in the first place.
             this._openEditorOverlay().catch((err: unknown) => console.error("Error opening the dashboard editor", err));
         }
     }
@@ -330,7 +343,8 @@ export class DashboardPage extends AbstractPageElement {
                 ownerId: asNamed(user?.id ?? 0),
                 name: asNamed("Nouveau tableau de bord"),
                 html: asNamed("<h1>Nouveau tableau de bord</h1>\n"),
-                sortOrder: asNamed(dashboards.length)
+                sortOrder: asNamed(dashboards.length),
+                isPublic: asNamed(false)
             };
             tr.insert("dashboards", item);
             // `tr.insert()` only ever assigns a temporary negative id
@@ -404,6 +418,14 @@ export class DashboardPage extends AbstractPageElement {
 
     //#region Sharing ---------------------------------------------------------
 
+    /**
+     * Owner view only (reachable exclusively through the toolbar's own
+     * "Partager" button, itself disabled for a non-owner by
+     * `_applyEditorPermission`): a public/private toggle, plus a read-only
+     * list of who has imported it so far. No more per-user picker — review
+     * feedback reworked sharing from "owner targets a specific recipient" to
+     * "owner publishes, everyone else opts in" (see `_openBrowseDialog`).
+     */
     protected async _openShareDialog(): Promise<void> {
         const dashboards = await this._loadDashboards();
         const current = this._currentDashboard(dashboards);
@@ -414,11 +436,24 @@ export class DashboardPage extends AbstractPageElement {
         const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
         const shares = entities.getHandler().getItems("dashboard_shares").filter((s) => s.dashboardId === current.id);
         const users = Dagda.get<UsersService>("users");
-        const everyone = await actionCall<DagdaActions, "listUserNames">("listUserNames");
-        const sharedUserIds = new Set(shares.map((s) => s.userId));
-        const candidates = everyone.filter((u) => u.id !== current.ownerId && !sharedUserIds.has(asNamed(u.id)));
 
         const body = document.createElement("div");
+
+        const toggleField = document.createElement("label");
+        toggleField.className = "dashboard-public-toggle";
+        const toggle = document.createElement("input");
+        toggle.type = "checkbox";
+        toggle.checked = current.isPublic;
+        toggleField.append(toggle, document.createTextNode(" Public — visible par tout le monde, à importer depuis « Parcourir »"));
+        toggle.addEventListener("change", () => {
+            this._setPublic(current, toggle.checked).catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+        });
+        body.appendChild(toggleField);
+
+        const intro = document.createElement("p");
+        intro.className = "text-muted";
+        intro.textContent = shares.length === 0 ? "Personne ne l'a encore importé." : "Importé par :";
+        body.appendChild(intro);
 
         const list = document.createElement("ul");
         list.className = "dashboard-share-list";
@@ -428,7 +463,7 @@ export class DashboardPage extends AbstractPageElement {
             const remove = document.createElement("button");
             remove.type = "button";
             remove.className = "btn btn-ghost btn-icon";
-            remove.setAttribute("aria-label", "Retirer le partage");
+            remove.setAttribute("aria-label", "Retirer l'accès");
             const icon = document.createElement("i");
             icon.className = "ph ph-x";
             icon.setAttribute("aria-hidden", "true");
@@ -441,46 +476,19 @@ export class DashboardPage extends AbstractPageElement {
         }
         body.appendChild(list);
 
-        const select = document.createElement("select");
-        select.className = "input";
-        for (const candidate of candidates) {
-            const option = document.createElement("option");
-            option.value = String(candidate.id);
-            option.textContent = candidate.displayName;
-            select.appendChild(option);
-        }
-        body.appendChild(select);
-
-        const actions: DialogAction[] = [
-            { label: "Fermer" },
-            {
-                label: "Partager",
-                className: "btn-primary",
-                onClick: async (): Promise<false> => {
-                    const userId = Number(select.value);
-                    if (Number.isFinite(userId)) {
-                        await this._shareWith(current, userId);
-                    }
-                    return false; // stays open — sharing with a second person is a likely next step
-                }
-            }
-        ];
+        const actions: DialogAction[] = [{ label: "Fermer" }];
         openDialog({ title: `Partager « ${current.name} »`, body, actions });
     }
 
-    protected async _shareWith(dashboard: DashboardEntity, userId: number): Promise<void> {
+    protected async _setPublic(dashboard: DashboardEntity, isPublic: boolean): Promise<void> {
         const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
         const handler = entities.getHandler();
         await handler.withTransaction((tr) => {
-            const item: DashboardShareEntity = {
-                id: asNamed(0),
-                dashboardId: dashboard.id,
-                userId: asNamed(userId)
-            };
-            tr.insert("dashboard_shares", item);
+            tr.update("dashboards", dashboard, { isPublic: asNamed(isPublic) });
         });
         await handler.waitForSubmit();
-        showToast("Tableau de bord partagé.", "success");
+        showToast(isPublic ? "Tableau de bord rendu public." : "Tableau de bord rendu privé.", "success");
+        await this.refresh();
     }
 
     protected async _unshare(share: DashboardShareEntity): Promise<void> {
@@ -491,6 +499,68 @@ export class DashboardPage extends AbstractPageElement {
         });
         await handler.waitForSubmit();
         showToast("Partage retiré.", "success");
+    }
+
+    /**
+     * Public dashboards the caller neither owns nor has already imported —
+     * open to any authenticated account, same posture as viewing a
+     * dashboard shared this way has always had (no permission needed).
+     */
+    protected async _openBrowseDialog(): Promise<void> {
+        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const handler = entities.getHandler();
+        await handler.fetch({ type: "publicDashboards", options: undefined });
+        const candidates = handler.getItems("dashboards")
+            .filter((d) => d.isPublic)
+            .slice()
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        const body = document.createElement("div");
+        if (candidates.length === 0) {
+            const empty = document.createElement("p");
+            empty.className = "text-muted";
+            empty.textContent = "Aucun tableau de bord public à importer pour l'instant.";
+            body.appendChild(empty);
+        } else {
+            const list = document.createElement("ul");
+            list.className = "dashboard-share-list";
+            for (const dashboard of candidates) {
+                const item = document.createElement("li");
+                item.textContent = dashboard.name;
+                const importButton = document.createElement("button");
+                importButton.type = "button";
+                importButton.className = "btn btn-ghost";
+                importButton.textContent = "Importer";
+                importButton.addEventListener("click", () => {
+                    this._importDashboard(dashboard).catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
+                });
+                item.appendChild(importButton);
+                list.appendChild(item);
+            }
+            body.appendChild(list);
+        }
+
+        openDialog({ title: "Parcourir les tableaux de bord publics", body, actions: [{ label: "Fermer" }] });
+    }
+
+    protected async _importDashboard(dashboard: DashboardEntity): Promise<void> {
+        const user = Dagda.get<AuthService>("auth").currentUser;
+        if (user == null) {
+            return;
+        }
+        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const handler = entities.getHandler();
+        await handler.withTransaction((tr) => {
+            const item: DashboardShareEntity = {
+                id: asNamed(0),
+                dashboardId: dashboard.id,
+                userId: asNamed(user.id)
+            };
+            tr.insert("dashboard_shares", item);
+        });
+        await handler.waitForSubmit();
+        showToast(`« ${dashboard.name} » importé.`, "success");
+        await this.refresh();
     }
 
     //#endregion

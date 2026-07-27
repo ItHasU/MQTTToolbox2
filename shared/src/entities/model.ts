@@ -127,17 +127,30 @@ export const APP_MODEL = new EntitiesModel({
         html: { type: "TEXT" },
         /** Position in the owner's swipeable list */
         sortOrder: { type: "INTEGER" },
+        /**
+         * Owner-settable (review feedback, superseding the original
+         * per-user "share with" model): a public dashboard is visible to
+         * every account, which may then independently import it
+         * (`dashboard_shares`) into its own list. Flipping this back to
+         * false is a live gate, not a one-time grant — an account that had
+         * already imported it loses access the moment this reads false
+         * again, re-checked on every fetch rather than only at import time.
+         */
+        isPublic: { type: "BOOLEAN" },
     },
 
     /**
-     * Who else may see a dashboard, beyond its owner (Dagda ROADMAP tranche
-     * 4). A synthetic `id`, not a composite `(dashboardId, userId)` primary
-     * key: the entities machinery assumes exactly one numeric identity column
-     * per table. The migration adds the `UNIQUE(dashboardId, userId)`
-     * constraint the composite key would otherwise have given for free, and
-     * overrides both foreign keys to `ON DELETE CASCADE` by hand, for the
-     * same reason as `dashboards.ownerId` above — a share row means nothing
-     * once either side of it is gone.
+     * Which accounts have imported a public dashboard into their own list
+     * (Dagda ROADMAP tranche 4, reworked per review feedback from "owner
+     * shares with a specific user" to "owner publishes, everyone else opts
+     * in"). A synthetic `id`, not a composite `(dashboardId, userId)`
+     * primary key: the entities machinery assumes exactly one numeric
+     * identity column per table. The migration adds the
+     * `UNIQUE(dashboardId, userId)` constraint the composite key would
+     * otherwise have given for free, and overrides both foreign keys to
+     * `ON DELETE CASCADE` by hand, for the same reason as
+     * `dashboards.ownerId` above — an import row means nothing once either
+     * side of it is gone.
      */
     dashboard_shares: {
         id: { type: "SHARE_ID", identity: true },

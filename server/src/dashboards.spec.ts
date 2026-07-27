@@ -21,6 +21,13 @@ const available = inject("databaseAvailable");
  * `listen()`s — no HTTP port, no broker connection — so `_fetch`/`_submit`/
  * `_notificationRecipients` can be called directly, the same way the actual
  * `/fetch` and `/submit` routes would.
+ *
+ * Sharing model (review feedback, superseding the original "owner picks a
+ * recipient"): a dashboard is owner-flagged public or not; any OTHER account
+ * may then insert its own `dashboard_shares` row ("import") for a public
+ * dashboard — never for someone else, never for a private one. `isPublic` is
+ * a live gate: flipping it back to false hides the dashboard from an
+ * existing importer's next fetch, even though their import row is untouched.
  */
 describe.runIf(available)("Dashboards — ownership and sharing", () => {
 
@@ -98,16 +105,24 @@ describe.runIf(available)("Dashboards — ownership and sharing", () => {
         })._fetch(context, options);
     }
 
-    async function createDashboard(owner: UserInfo, name: string): Promise<number> {
+    async function createDashboard(owner: UserInfo, name: string, isPublic = false): Promise<number> {
         const result = await submitAs(owner, [{
             type: OperationType.INSERT,
-            options: { table: "dashboards", item: { id: -1, ownerId: owner.id, name, html: "<p>hi</p>", sortOrder: 0 } as never }
+            options: { table: "dashboards", item: { id: -1, ownerId: owner.id, name, html: "<p>hi</p>", sortOrder: 0, isPublic } as never }
         }]);
         return result.updatedIds[-1]!;
     }
 
-    async function shareWith(owner: UserInfo, dashboardId: number, recipient: UserInfo): Promise<void> {
+    async function setPublic(owner: UserInfo, dashboardId: number, isPublic: boolean): Promise<void> {
         await submitAs(owner, [{
+            type: OperationType.UPDATE,
+            options: { table: "dashboards", id: asNamed(dashboardId), values: { isPublic } }
+        }]);
+    }
+
+    /** The recipient imports a dashboard for themselves — the only shape `_checkDashboardWriteAccess` now accepts */
+    async function importAs(recipient: UserInfo, dashboardId: number): Promise<void> {
+        await submitAs(recipient, [{
             type: OperationType.INSERT,
             options: { table: "dashboard_shares", item: { id: -1, dashboardId, userId: recipient.id } as never }
         }]);
@@ -121,16 +136,63 @@ describe.runIf(available)("Dashboards — ownership and sharing", () => {
         expect(bobsView.dashboards?.map((d) => d.name)).toEqual(["Bob's private board"]);
     });
 
-    it("includes a dashboard once it is shared, for the recipient only", async () => {
-        const dashboardId = await createDashboard(alice, "Alice's board");
+    it("includes a public dashboard once imported, for the importer only", async () => {
+        const dashboardId = await createDashboard(alice, "Alice's board", true);
 
         let bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
         expect(bobsView.dashboards).toEqual([]);
 
-        await shareWith(alice, dashboardId, bob);
+        await importAs(bob, dashboardId);
 
         bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
         expect(bobsView.dashboards?.map((d) => d.name)).toEqual(["Alice's board"]);
+    });
+
+    it("never lists a private dashboard as importable, and never appears merely by existing", async () => {
+        await createDashboard(alice, "Alice's private board", false);
+
+        const publicList = await fetchAs(bob, { type: "publicDashboards", options: undefined });
+        expect(publicList.dashboards).toEqual([]);
+    });
+
+    it("lists a public dashboard as importable until it is imported", async () => {
+        const dashboardId = await createDashboard(alice, "Public board", true);
+
+        let publicList = await fetchAs(bob, { type: "publicDashboards", options: undefined });
+        expect(publicList.dashboards?.map((d) => d.id)).toEqual([dashboardId]);
+
+        await importAs(bob, dashboardId);
+
+        publicList = await fetchAs(bob, { type: "publicDashboards", options: undefined });
+        expect(publicList.dashboards).toEqual([]);
+    });
+
+    it("rejects importing a private dashboard", async () => {
+        const dashboardId = await createDashboard(alice, "Private", false);
+
+        await expect(importAs(bob, dashboardId)).rejects.toThrow(/not public/);
+    });
+
+    it("rejects importing a dashboard for someone else", async () => {
+        const dashboardId = await createDashboard(alice, "Public board", true);
+
+        await expect(submitAs(bob, [{
+            type: OperationType.INSERT,
+            options: { table: "dashboard_shares", item: { id: -1, dashboardId, userId: alice.id } as never }
+        }])).rejects.toThrow(/only import a dashboard for yourself/);
+    });
+
+    it("revoking public access hides the dashboard from an existing importer's next fetch", async () => {
+        const dashboardId = await createDashboard(alice, "Now you see it", true);
+        await importAs(bob, dashboardId);
+
+        let bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
+        expect(bobsView.dashboards?.map((d) => d.id)).toEqual([dashboardId]);
+
+        await setPublic(alice, dashboardId, false);
+
+        bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
+        expect(bobsView.dashboards).toEqual([]);
     });
 
     it("rejects a write to a dashboard the caller does not own", async () => {
@@ -152,7 +214,7 @@ describe.runIf(available)("Dashboards — ownership and sharing", () => {
         const dashboardId = await submitAs(alice, [{
             type: OperationType.INSERT,
             // Alice claims the dashboard belongs to Bob — must be overwritten.
-            options: { table: "dashboards", item: { id: -1, ownerId: bob.id, name: "x", html: "", sortOrder: 0 } as never }
+            options: { table: "dashboards", item: { id: -1, ownerId: bob.id, name: "x", html: "", sortOrder: 0, isPublic: false } as never }
         }]).then((r) => r.updatedIds[-1]!);
 
         const bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
@@ -188,9 +250,9 @@ describe.runIf(available)("Dashboards — ownership and sharing", () => {
             expect(filter!(alice)).toBe(true);
         });
 
-        it("includes the recipient once a dashboard is shared", async () => {
-            const dashboardId = await createDashboard(alice, "Shared");
-            await shareWith(alice, dashboardId, bob);
+        it("includes the importer once a public dashboard is imported", async () => {
+            const dashboardId = await createDashboard(alice, "Shared", true);
+            await importAs(bob, dashboardId);
 
             const filter = await notificationRecipients({
                 operations: [{ type: OperationType.UPDATE, options: { table: "dashboards", id: asNamed(dashboardId), values: { name: "renamed" } } }],
@@ -200,14 +262,27 @@ describe.runIf(available)("Dashboards — ownership and sharing", () => {
             expect(filter!(bob)).toBe(true);
         });
 
-        it("excludes the recipient again once un-shared", async () => {
-            const dashboardId = await createDashboard(alice, "Shared then not");
-            await shareWith(alice, dashboardId, bob);
+        it("excludes the importer again once they leave", async () => {
+            const dashboardId = await createDashboard(alice, "Shared then not", true);
+            await importAs(bob, dashboardId);
 
             const shareRow = await (app as unknown as { _db: { get: (q: string, ...p: unknown[]) => Promise<{ id: number } | null> } })
                 ._db.get(`SELECT "id" FROM "data_dashboard_shares" WHERE "dashboardId" = $1 AND "userId" = $2`, dashboardId, bob.id);
 
-            await submitAs(alice, [{ type: OperationType.DELETE, options: { table: "dashboard_shares", id: asNamed(shareRow!.id) } }]);
+            await submitAs(bob, [{ type: OperationType.DELETE, options: { table: "dashboard_shares", id: asNamed(shareRow!.id) } }]);
+
+            const filter = await notificationRecipients({
+                operations: [{ type: OperationType.UPDATE, options: { table: "dashboards", id: asNamed(dashboardId), values: { name: "renamed" } } }],
+                contexts: []
+            }, alice);
+
+            expect(filter!(bob)).toBe(false);
+        });
+
+        it("excludes an importer the moment the dashboard is flipped private, even with their import row still in place", async () => {
+            const dashboardId = await createDashboard(alice, "Public then private", true);
+            await importAs(bob, dashboardId);
+            await setPublic(alice, dashboardId, false);
 
             const filter = await notificationRecipients({
                 operations: [{ type: OperationType.UPDATE, options: { table: "dashboards", id: asNamed(dashboardId), values: { name: "renamed" } } }],
