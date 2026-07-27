@@ -1,8 +1,4 @@
 import { DagdaClient } from "@dagda/client/src/app";
-import { PreferencesPage } from "@dagda/client/src/pages/preferences/preferences.page";
-import { RolesPage } from "@dagda/client/src/pages/roles/roles.page";
-import { SettingsPage } from "@dagda/client/src/pages/settings/settings.page";
-import { UsersPage } from "@dagda/client/src/pages/users/users.page";
 import { AppTypes } from "@mqtt-toolbox/shared/src/app/types";
 import { APP_CONTEXT_ADAPTER } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
@@ -34,8 +30,9 @@ DagdaClient.start<AppTypes, AppPages>({
     // tranche 4) — the app's own list stays the framework's default
     // (nocturne/aurore), only the storage key is app-specific.
     themePreferenceKey: "ui.theme",
-    // System settings (Dagda FEATURES §11.5) — consumed by the framework's
-    // own SettingsPage, registered below.
+    // System settings (Dagda FEATURES §11.5) — presence alone is what makes
+    // the framework register its default Settings page (Dagda
+    // pages/defaults.ts); no local Settings entry needed in `pages:` below.
     settings: APP_SETTINGS,
     // The dashboard JS API (Dagda ROADMAP tranche 4, FEATURES §6.2) — one
     // instance for the whole session, reachable via Dagda.get("mqtt") from
@@ -71,19 +68,9 @@ DagdaClient.start<AppTypes, AppPages>({
         // message arriving on the open topic redraws the table itself,
         // same reasoning as the status page — a handful of rows is cheap
         // to redraw on every change.
-        topicHistory: { title: "Historique du topic", constructor: TopicHistoryPage, autoRefresh: true },
-        // Secondary group: framework-flavoured administration, same spot the
-        // future settings screen will take (Dagda specs/navigation.md §3.1).
-        // Gated server-side too (Dagda FEATURES §11.2) — hiding the entry is
-        // convenience, not the access check.
-        roles: { title: "Rôles", constructor: RolesPage, icon: "ph-shield-check", menu: { group: "secondary", order: 1 }, permission: "roles.manage" },
-        users: { title: "Utilisateurs", constructor: UsersPage, icon: "ph-users", menu: { group: "secondary", order: 2 }, permission: "users.manage" },
-        // Écran d'édition des paramètres système (Dagda FEATURES §11.5,
-        // ROADMAP tranche 3).
-        settings: { title: "Paramètres", constructor: SettingsPage, icon: "ph-sliders", menu: { group: "secondary", order: 3 }, permission: "settings.manage" },
-        // Préférences personnelles (Dagda FEATURES §11.6, ROADMAP tranche 4)
-        // — last of the secondary group. No permission: unlike settings,
-        // every account may read and write its own.
-        preferences: { title: "Préférences", constructor: PreferencesPage, icon: "ph-sliders-horizontal", menu: { group: "secondary", order: 4 } }
+        topicHistory: { title: "Historique du topic", constructor: TopicHistoryPage, autoRefresh: true }
+        // Rôles/Utilisateurs/Paramètres/Préférences: registered automatically
+        // by the framework (Dagda pages/defaults.ts) — nothing to declare
+        // here unless overriding one of them (icon, menu order, ...).
     }
 });
