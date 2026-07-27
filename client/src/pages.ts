@@ -1,11 +1,11 @@
+import { PreferencesPage } from "@dagda/client/src/pages/preferences/preferences.page";
+import { RolesPage } from "@dagda/client/src/pages/roles/roles.page";
+import { SettingsPage } from "@dagda/client/src/pages/settings/settings.page";
+import { UsersPage } from "@dagda/client/src/pages/users/users.page";
 import { DashboardPage } from "./pages/dashboard/dashboard.page";
-import { PreferencesPage } from "./pages/preferences/preferences.page";
 import { PublishPage } from "./pages/publish/publish.page";
-import { RolesPage } from "./pages/roles/roles.page";
-import { SettingsPage } from "./pages/settings/settings.page";
 import { StatusPage } from "./pages/status/status.page";
 import { TopicHistoryPage } from "./pages/topic-history/topic-history.page";
-import { UsersPage } from "./pages/users/users.page";
 
 /**
  * The pages of the application: the only thing the framework cannot know.

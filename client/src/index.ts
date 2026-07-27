@@ -1,19 +1,19 @@
 import { DagdaClient } from "@dagda/client/src/app";
+import { PreferencesPage } from "@dagda/client/src/pages/preferences/preferences.page";
+import { RolesPage } from "@dagda/client/src/pages/roles/roles.page";
+import { SettingsPage } from "@dagda/client/src/pages/settings/settings.page";
+import { UsersPage } from "@dagda/client/src/pages/users/users.page";
 import { AppTypes } from "@mqtt-toolbox/shared/src/app/types";
 import { APP_CONTEXT_ADAPTER } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
+import { APP_SETTINGS } from "@mqtt-toolbox/shared/src/settings";
 import { MqttApi } from "./dashboard/mqtt-api";
 import { registerAppFieldEditors } from "./forms/defaults";
 import { AppPages } from "./pages";
 import { DashboardPage } from "./pages/dashboard/dashboard.page";
-import "./styles/dashboard.css";
-import { PreferencesPage } from "./pages/preferences/preferences.page";
 import { PublishPage } from "./pages/publish/publish.page";
-import { RolesPage } from "./pages/roles/roles.page";
-import { SettingsPage } from "./pages/settings/settings.page";
 import { StatusPage } from "./pages/status/status.page";
 import { TopicHistoryPage } from "./pages/topic-history/topic-history.page";
-import { UsersPage } from "./pages/users/users.page";
 
 // No custom element to reference here any more: the framework registers its
 // own, and index.html is down to <dagda-app> (Dagda specs/navigation.md §6.1).
@@ -34,6 +34,9 @@ DagdaClient.start<AppTypes, AppPages>({
     // tranche 4) — the app's own list stays the framework's default
     // (nocturne/aurore), only the storage key is app-specific.
     themePreferenceKey: "ui.theme",
+    // System settings (Dagda FEATURES §11.5) — consumed by the framework's
+    // own SettingsPage, registered below.
+    settings: APP_SETTINGS,
     // The dashboard JS API (Dagda ROADMAP tranche 4, FEATURES §6.2) — one
     // instance for the whole session, reachable via Dagda.get("mqtt") from
     // any component, loaded lazily (ensureLoaded()) the first time a
@@ -59,8 +62,10 @@ DagdaClient.start<AppTypes, AppPages>({
         status: { title: "Statut", constructor: StatusPage, icon: "ph-gauge", menu: { order: 1 }, autoRefresh: true },
         // The pending list needs the live queue, same reasoning as the status
         // page above — a scheduled publish firing while the page is open must
-        // move the row on its own.
-        publish: { title: "Publier", constructor: PublishPage, icon: "ph-paper-plane-tilt", menu: { order: 2 }, autoRefresh: true },
+        // move the row on its own. Gated server-side too (review feedback):
+        // hiding the entry is convenience, not the access check — the same
+        // posture roles/users/settings already take below.
+        publish: { title: "Publier", constructor: PublishPage, icon: "ph-paper-plane-tilt", menu: { order: 2 }, autoRefresh: true, permission: "publish.send" },
         // Reached from a click on a topic in the status page, never listed:
         // no `menu` here (Dagda specs/navigation.md). `autoRefresh` so a
         // message arriving on the open topic redraws the table itself,

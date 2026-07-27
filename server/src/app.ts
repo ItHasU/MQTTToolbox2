@@ -55,22 +55,30 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPrefe
     //#region Actions (Dagda FEATURES §11.1) -----------------------------------
 
     protected _registerActions(): void {
+        // Gated on publish.send (review feedback): hiding the Publier page
+        // was never access control on its own — these four were reachable by
+        // any authenticated account via a direct call regardless of what the
+        // menu showed.
         this.registerAction("publishMessage", async (user, params: PublishMessageParams): Promise<void> => {
+            this._requirePermission(user, "publish.send");
             await this._publishAndRecord(params, user.id);
         });
 
         this.registerAction("schedulePublish", async (user, params: SchedulePublishParams) => {
+            this._requirePermission(user, "publish.send");
             if (params.sendAt <= Date.now()) {
                 throw new Error("The scheduled time must be in the future");
             }
             return this._scheduler.schedule(params, user.id);
         });
 
-        this.registerAction("cancelScheduledPublish", async (_user, params: { id: number }): Promise<void> => {
+        this.registerAction("cancelScheduledPublish", async (user, params: { id: number }): Promise<void> => {
+            this._requirePermission(user, "publish.send");
             this._scheduler.cancel(params.id);
         });
 
-        this.registerAction("listScheduledPublishes", async () => {
+        this.registerAction("listScheduledPublishes", async (user) => {
+            this._requirePermission(user, "publish.send");
             return this._scheduler.list();
         });
     }

@@ -18,6 +18,7 @@ import { MqttService } from "../../dashboard/mqtt-api";
 // components, side-effect only — the same idiom as registerAppFieldEditors().
 import "@dagda/client/src/editor/editor.component";
 import "../../dashboard/components";
+import "./dashboard.css";
 import template from "./dashboard.page.html";
 
 /** A ready-to-insert example, for a dashboard author who does not know the component vocabulary by heart (FEATURES §6) */
@@ -32,7 +33,7 @@ const SNIPPETS: Snippet[] = [
     { label: "Date du dernier message", html: '<mqtt-date topic="a/b"></mqtt-date>' },
     { label: "Ancienneté", html: '<mqtt-age topic="a/b" unit="auto"></mqtt-age>' },
     { label: "Affichage conditionnel", html: '<mqtt-if topic="a/b" path="state" equals="on">\n    Allumé\n</mqtt-if>' },
-    { label: "Publier depuis un script", html: '<button onclick="MQTT.publish(\'a/b\', \'1\')">Publier</button>' }
+    { label: "Publier depuis un script", html: '<button onclick="dagda.routes.publishMessage({topic: \'a/b\', payload: \'1\'})">Publier</button>' }
 ];
 
 /**
@@ -115,6 +116,11 @@ export class DashboardPage extends AbstractPageElement {
         this._closeEditor.addEventListener("click", () => this._closeEditorOverlay());
         this._editor.addEventListener("dagda-editor-change", (event) => {
             this._renderHtml(this._preview, (event as CustomEvent<{ value: string }>).detail.value);
+        });
+        // Cmd/Ctrl+S from inside the editor (review feedback) — same save
+        // path as the toolbar's own button.
+        this._editor.addEventListener("dagda-editor-save", () => {
+            this._saveCurrent().catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err)));
         });
         // Portrait's drawer has its own Ctrl+E-unrelated close triggers
         // (`specs/navigation.md` §4.3) — this is the page's own shortcut,
@@ -360,7 +366,7 @@ export class DashboardPage extends AbstractPageElement {
             tr.update("dashboards", current, { name: asNamed(name), html: asNamed(this._editor.value ?? "") });
         });
         await handler.waitForSubmit();
-        showToast("Tableau de bord enregistré.");
+        showToast("Tableau de bord enregistré.", "success");
         await this.refresh();
     }
 
@@ -474,7 +480,7 @@ export class DashboardPage extends AbstractPageElement {
             tr.insert("dashboard_shares", item);
         });
         await handler.waitForSubmit();
-        showToast("Tableau de bord partagé.");
+        showToast("Tableau de bord partagé.", "success");
     }
 
     protected async _unshare(share: DashboardShareEntity): Promise<void> {
@@ -484,7 +490,7 @@ export class DashboardPage extends AbstractPageElement {
             tr.delete("dashboard_shares", share.id);
         });
         await handler.waitForSubmit();
-        showToast("Partage retiré.");
+        showToast("Partage retiré.", "success");
     }
 
     //#endregion

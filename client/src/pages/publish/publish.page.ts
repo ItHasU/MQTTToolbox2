@@ -53,7 +53,11 @@ export class PublishPage extends AbstractPageElement {
     }
 
     protected override async _init(): Promise<void> {
-        this._qos.setEnumeration(QOS);
+        // hasDefault: true — a blank leading option here was selectable but
+        // meaningless (submitting with it silently fell back to QoS 0
+        // anyway), since the very next line already gives this field a
+        // real default.
+        this._qos.setEnumeration(QOS, true);
         this._qos.value = QOS.values.AT_MOST_ONCE;
 
         this._modeNow.addEventListener("change", () => this._syncMode());

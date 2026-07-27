@@ -16,5 +16,9 @@ export const APP_PERMISSIONS = {
     "dashboards.edit": {
         label: "Créer et modifier des tableaux de bord",
         description: "Créer, éditer, réorganiser ou partager un tableau de bord — pas seulement consulter ceux qui sont partagés avec soi"
+    },
+    "publish.send": {
+        label: "Publier des messages",
+        description: "Envoyer un message immédiatement ou le planifier, et gérer la file d'attente des envois différés"
     }
 } as const satisfies PermissionsDeclaration;

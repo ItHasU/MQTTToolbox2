@@ -1,9 +1,7 @@
-import { actionCall } from "@dagda/client/src/actions";
 import { Dagda } from "@dagda/shared/src/dagda";
 import { EntitiesService } from "@dagda/shared/src/entities/service";
 import { NotificationService } from "@dagda/shared/src/notification/service";
 import { EventListener } from "@dagda/shared/src/tools/events";
-import { AppActions, ScheduledPublish } from "@mqtt-toolbox/shared/src/actions";
 import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { IngestedMessage } from "@mqtt-toolbox/shared/src/entities/events";
 import { AppEntityTypes } from "@mqtt-toolbox/shared/src/entities/types";
@@ -44,11 +42,12 @@ export interface MqttService {
  * dashboard page does that, not this class — this class has no opinion
  * about *where* it's exposed, only about what it does).
  *
- * Kept deliberately close to the future automation API (§5.3) in names and
- * signatures — same mental model for the user, the only difference being
- * where it runs: `MQTT.trigger(name)` (triggering an automation from a
- * dashboard) is a documented gap here, not implemented, since automations
- * don't exist until tranche 6.
+ * Read-only by design (review feedback): publishing/scheduling is
+ * `dagda.routes.publishMessage(...)` etc. directly — the same console/
+ * script-facing RPC surface every other route uses, not a second one
+ * special-cased to dashboards. `window.dagda` is installed app-wide, not
+ * scoped to the dashboard page, so a dashboard script reaches it exactly the
+ * same way the browser console does.
  */
 export class MqttApi {
 
@@ -124,31 +123,6 @@ export class MqttApi {
         const wrapped = (value: MqttValue): void => callback(value.payload);
         set.add(wrapped);
         return () => set.delete(wrapped);
-    }
-
-    /**
-     * Publishes a message. `payload` a string is sent as-is; an object is
-     * `JSON.stringify`'d first — binary is not yet supported (the
-     * `publishMessage` action itself is text-only for now, FEATURES §3).
-     */
-    public async publish(topic: string, payload: string | Record<string, unknown>, options?: { retain?: boolean, qos?: 0 | 1 | 2 }): Promise<void> {
-        const text = typeof payload === "string" ? payload : JSON.stringify(payload);
-        await actionCall<AppActions, "publishMessage">("publishMessage", {
-            topic,
-            payload: text,
-            retain: options?.retain,
-            qos: options?.qos
-        });
-    }
-
-    /** Every publish still waiting to fire (FEATURES §3) */
-    public async getScheduled(): Promise<ScheduledPublish[]> {
-        return actionCall<AppActions, "listScheduledPublishes">("listScheduledPublishes");
-    }
-
-    /** Cancels a scheduled publish before it fires */
-    public async cancelScheduled(id: number): Promise<void> {
-        await actionCall<AppActions, "cancelScheduledPublish">("cancelScheduledPublish", { id });
     }
 
 }
