@@ -9,6 +9,15 @@
     margin-bottom: var(--space-3);
 }
 
+/* Same equal-specificity trap as `.dashboard-editor-overlay[hidden]` below:
+   `.btn`'s own `display: inline-flex` (dagda-ui.css) is an author rule and
+   so beats the browser's UA-level `[hidden] { display: none }` at equal
+   specificity — without this, the "leave" button's `hidden` attribute would
+   be silently ignored. */
+.dashboard-bar button[hidden] {
+    display: none;
+}
+
 .dashboard-tabs {
     display: flex;
     gap: var(--space-2);
@@ -17,6 +26,9 @@
 }
 
 .dashboard-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
     padding: var(--space-2) var(--space-3);
     border: 0;
     border-radius: var(--radius-md);
@@ -26,6 +38,11 @@
     font-size: var(--font-size-control);
     white-space: nowrap;
     cursor: pointer;
+}
+
+.dashboard-tab-shared-icon {
+    font-size: var(--font-size-sm);
+    opacity: 0.75;
 }
 
 .dashboard-tab:hover {

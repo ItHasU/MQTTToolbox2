@@ -101,7 +101,10 @@ describe.runIf(available)("Dashboards — ownership and sharing", () => {
             user
         };
         return (app as unknown as {
-            _fetch: (c: AppContexts, r: RequestOptionsFromClient) => Promise<{ dashboards?: { id: number, name: string }[] }>
+            _fetch: (c: AppContexts, r: RequestOptionsFromClient) => Promise<{
+                dashboards?: { id: number, name: string }[],
+                dashboard_shares?: { id: number, dashboardId: number, userId: number }[]
+            }>
         })._fetch(context, options);
     }
 
@@ -193,6 +196,32 @@ describe.runIf(available)("Dashboards — ownership and sharing", () => {
 
         bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
         expect(bobsView.dashboards).toEqual([]);
+    });
+
+    it("includes the importer's own dashboard_shares row on a dashboard they don't own, so the client can find its id to leave (bug fix)", async () => {
+        const dashboardId = await createDashboard(alice, "Public board", true);
+        await importAs(bob, dashboardId);
+
+        const bobsView = await fetchAs(bob, { type: "dashboards", options: undefined });
+        expect(bobsView.dashboard_shares).toEqual([
+            expect.objectContaining({ dashboardId, userId: bob.id })
+        ]);
+    });
+
+    it("never includes another user's own import row of a dashboard the caller doesn't own", async () => {
+        const dashboardId = await createDashboard(alice, "Public board", true);
+        await importAs(bob, dashboardId);
+
+        // A third party who neither owns nor imported it must see no rows at all.
+        const users: UserStore = (app as unknown as { _users: UserStore })._users;
+        const roles: RoleStore = (app as unknown as { _roles: RoleStore })._roles;
+        const editorRole = await roles.create({ name: "Editor2", permissions: ["dashboards.edit"] });
+        const createdCarol = await users.create({ login: "carol", password: "hunter2" });
+        await users.setRole(createdCarol.id, editorRole.id);
+        const carol = (await users.getById(createdCarol.id))!;
+
+        const carolsView = await fetchAs(carol, { type: "dashboards", options: undefined });
+        expect(carolsView.dashboard_shares).toEqual([]);
     });
 
     it("rejects a write to a dashboard the caller does not own", async () => {

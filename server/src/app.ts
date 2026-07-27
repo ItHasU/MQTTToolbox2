@@ -203,15 +203,18 @@ export class ServerApp extends AbstractServerApp<AppTypes, AppSettings, AppPrefe
                          ORDER BY d."sortOrder"`,
                         userId
                     );
-                // The import rows for whichever of those dashboards the
-                // caller owns — needed to render "imported by: …" on their
-                // own dashboards, never on ones merely imported by them.
+                // Two distinct needs, both satisfied by this one query: the
+                // import rows for dashboards the caller owns (renders
+                // "imported by: …" in their own share dialog), and the
+                // caller's own import rows on dashboards they don't own
+                // (lets the client find its own row's id to leave one —
+                // fix for "can't un-import a shared dashboard").
                 result.dashboard_shares = userId == null
                     ? await this._db.all(`SELECT * FROM ${DASHBOARD_SHARES}`)
                     : await this._db.all(
                         `SELECT s.* FROM ${DASHBOARD_SHARES} s
                          INNER JOIN ${DASHBOARDS} d ON d."id" = s."dashboardId"
-                         WHERE d."ownerId" = $1`,
+                         WHERE d."ownerId" = $1 OR s."userId" = $1`,
                         userId
                     );
                 break;

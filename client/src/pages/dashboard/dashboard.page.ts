@@ -55,6 +55,8 @@ export class DashboardPage extends AbstractPageElement {
     @Ref("edit-toggle")
     protected _editToggle!: HTMLButtonElement;
     @Ref()
+    protected _leave!: HTMLButtonElement;
+    @Ref()
     protected _empty!: HTMLElement;
     @Ref()
     protected _content!: HTMLDivElement;
@@ -116,6 +118,7 @@ export class DashboardPage extends AbstractPageElement {
         this._add.addEventListener("click", () => this._createDashboard().catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err))));
         this._browse.addEventListener("click", () => this._openBrowseDialog().catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err))));
         this._editToggle.addEventListener("click", () => this._toggleEditor());
+        this._leave.addEventListener("click", () => this._confirmLeave());
         this._share.addEventListener("click", () => this._openShareDialog());
         this._delete.addEventListener("click", () => this._confirmDelete());
         this._save.addEventListener("click", () => this._saveCurrent().catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err))));
@@ -166,6 +169,10 @@ export class DashboardPage extends AbstractPageElement {
 
         this._canEditCurrent = current != null && this._isOwner(current);
         this._editToggle.toggleAttribute("disabled", !this._canEditCurrent);
+        // Only the owner may edit a dashboard, but only a non-owner ever
+        // needs to leave one — the two buttons are mutually exclusive, never
+        // both visible at once.
+        this._leave.hidden = current == null || this._isOwner(current);
 
         if (this._editing) {
             this._applyEditorPermission(current);
@@ -201,6 +208,7 @@ export class DashboardPage extends AbstractPageElement {
 
     protected _renderTabs(dashboards: DashboardEntity[]): void {
         this._tabs.replaceChildren();
+        const user = Dagda.get<AuthService>("auth").currentUser;
         for (const dashboard of dashboards) {
             const button = document.createElement("button");
             button.type = "button";
@@ -210,7 +218,18 @@ export class DashboardPage extends AbstractPageElement {
             if (dashboard.id === this._currentId) {
                 button.setAttribute("aria-current", "page");
             }
-            button.textContent = dashboard.name;
+            // Literal ownership, not `_isOwner()` — a super-admin may edit
+            // any dashboard, but that is not what this icon reports; it
+            // answers "did I author this one", so an imported dashboard
+            // never gets mistaken for one of the caller's own.
+            if (dashboard.ownerId !== user?.id) {
+                const icon = document.createElement("i");
+                icon.className = "ph ph-share-network dashboard-tab-shared-icon";
+                icon.setAttribute("aria-hidden", "true");
+                icon.title = "Tableau de bord importé — vous n'en êtes pas propriétaire";
+                button.appendChild(icon);
+            }
+            button.appendChild(document.createTextNode(dashboard.name));
             button.addEventListener("click", () => this._select(dashboard.id));
             this._tabs.appendChild(button);
         }
@@ -414,6 +433,44 @@ export class DashboardPage extends AbstractPageElement {
         openDialog({ title: "Supprimer le tableau de bord", body, actions });
     }
 
+    /**
+     * Self-service "un-import" for a dashboard the caller does not own
+     * (bug fix: there was previously no way to leave one at all — the
+     * owner-only share dialog was the sole path to removing a
+     * `dashboard_shares` row, and a non-owner cannot open it, or even the
+     * editor overlay it lives in).
+     */
+    protected _confirmLeave(): void {
+        const body = document.createElement("p");
+        body.textContent = "Quitter ce tableau de bord ? Vous ne le verrez plus dans votre liste, mais pourrez l'importer de nouveau depuis « Parcourir » tant qu'il reste public.";
+
+        const actions: DialogAction[] = [
+            { label: "Annuler" },
+            {
+                label: "Quitter",
+                className: "btn-primary",
+                onClick: async () => {
+                    const dashboards = await this._loadDashboards();
+                    const current = this._currentDashboard(dashboards);
+                    const user = Dagda.get<AuthService>("auth").currentUser;
+                    if (current == null || user == null) {
+                        return;
+                    }
+                    const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+                    const myShare = entities.getHandler().getItems("dashboard_shares")
+                        .find((s) => s.dashboardId === current.id && s.userId === user.id);
+                    if (myShare == null) {
+                        return;
+                    }
+                    await this._unshare(myShare);
+                    this._currentId = null;
+                    await this.refresh();
+                }
+            }
+        ];
+        openDialog({ title: "Quitter le tableau de bord", body, actions });
+    }
+
     //#endregion
 
     //#region Sharing ---------------------------------------------------------
@@ -498,6 +555,17 @@ export class DashboardPage extends AbstractPageElement {
             tr.delete("dashboard_shares", share.id);
         });
         await handler.waitForSubmit();
+        // Deleting a `dashboard_shares` row can change whether a *different*
+        // table's row (the `dashboards` entry itself) still belongs in this
+        // session's view — a relationship the generic entities cache has no
+        // way to know about on its own. The server tells every *other*
+        // session via `contextChanged`, but the writer's own session is
+        // deliberately excluded from that echo (self-echo suppression, ROADMAP
+        // tranche 4's notification-leak fix), so without this the caller's
+        // own `dashboards` fetch stays marked "not dirty" and a subsequent
+        // fetch() is skipped entirely — leaving the just-left dashboard
+        // stuck in the tab list until something else happens to dirty it.
+        handler.markCacheDirty();
         showToast("Partage retiré.", "success");
     }
 
@@ -510,8 +578,22 @@ export class DashboardPage extends AbstractPageElement {
         const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
         const handler = entities.getHandler();
         await handler.fetch({ type: "publicDashboards", options: undefined });
+        const user = Dagda.get<AuthService>("auth").currentUser;
+        // `getItems("dashboards")` reads the whole shared entity cache, not
+        // just what this fetch just returned — it still holds every
+        // dashboard an earlier `{type: "dashboards"}` fetch cached, owned or
+        // already-imported ones included. The server's own `publicDashboards`
+        // query already excludes both, but that filtering is lost the moment
+        // this reads the cache instead of that query's actual result, so it
+        // has to be redone here explicitly (this was the "I see my own
+        // dashboards in Parcourir" bug).
+        const alreadyImported = new Set(
+            handler.getItems("dashboard_shares")
+                .filter((s) => s.userId === user?.id)
+                .map((s) => s.dashboardId)
+        );
         const candidates = handler.getItems("dashboards")
-            .filter((d) => d.isPublic)
+            .filter((d) => d.isPublic && d.ownerId !== user?.id && !alreadyImported.has(d.id))
             .slice()
             .sort((a, b) => a.name.localeCompare(b.name));
 
