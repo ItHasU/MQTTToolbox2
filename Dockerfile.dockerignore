@@ -1,0 +1,19 @@
+# Applies to the whole build context (the parent directory of this repo and
+# dagda) when building with BuildKit, which looks for a dockerignore file
+# named after the Dockerfile before falling back to a plain .dockerignore at
+# the context root — keeps this scoped to MQTTToolbox2's own Dockerfile
+# without needing a file outside this repo.
+#
+# CI checks out both repos fresh, so none of this ever exists there; this
+# only matters for a local `docker build` run against an already-worked-in
+# checkout.
+
+**/node_modules
+**/dist
+**/.tsc-build
+**/.git
+**/*.log
+# Never in git (see .gitignore) so CI never has it either — excluded here
+# too, defensively, for a local build run against a real checkout: it must
+# never end up baked into a build-stage layer.
+**/.env

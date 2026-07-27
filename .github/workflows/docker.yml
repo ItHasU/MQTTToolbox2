@@ -1,0 +1,79 @@
+name: Docker
+
+# Every branch, tagged to match — Dagda (the framework this app is built on)
+# lives in its own sibling repository, so the build needs a matching
+# checkout of it too (see the "Pick the Dagda ref" step below and
+# Dockerfile's own comment on the file:../../dagda/packages/* dependency).
+on:
+  push:
+    branches: ["**"]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout MQTTToolbox2
+        uses: actions/checkout@v4
+        with:
+          path: MQTTToolbox2
+
+      # Both repos are developed in lockstep on matching branch names (e.g.
+      # spec/reboot in both) — but a branch that only ever existed in this
+      # repo has nothing to match in Dagda, so fall back to its default
+      # branch rather than failing the whole build.
+      - name: Pick the Dagda ref to build against
+        id: dagda-ref
+        run: |
+          if git ls-remote --exit-code --heads https://github.com/ItHasU/dagda.git "${{ github.ref_name }}" >/dev/null 2>&1; then
+            echo "ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout Dagda
+        uses: actions/checkout@v4
+        with:
+          repository: ItHasU/dagda
+          ref: ${{ steps.dagda-ref.outputs.ref }}
+          path: dagda
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ghcr.io rejects an uppercase image name; github.repository ("ItHasU/
+      # MQTTToolbox2") isn't one.
+      - name: Lowercase the image name
+        id: image
+        run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Derive the image tag from the branch name
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.image.outputs.name }}
+          tags: |
+            type=ref,event=branch
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          # The parent of both checkouts — Dockerfile's own COPY instructions
+          # pick "dagda" and "MQTTToolbox2" out of it by name.
+          context: .
+          file: MQTTToolbox2/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
