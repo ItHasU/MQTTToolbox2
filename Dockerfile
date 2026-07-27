@@ -59,7 +59,7 @@ WORKDIR /app/server
 # Bootstrap-only configuration (Dagda FEATURES §11.5) — everything else
 # (broker URL, retention, ...) is a system setting stored in the database,
 # editable from the Paramètres screen after first boot, not an env var here.
-#   PORT, BASE_URL, DB_URL, SECRET_KEY — see .env.example.
+#   APP_PORT, APP_BASE_URL, APP_DATABASE_URL, APP_SECRET — see .env.example.
 ENV NODE_ENV=production
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

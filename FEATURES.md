@@ -317,7 +317,7 @@ C'est **la** fonctionnalité centrale de l'outil.
 - ⚠️ Conséquence : Dagda ne supporte que **PostgreSQL** (ni SQLite ni fichier).
   Le déploiement passe donc d'un conteneur autonome à un couple app + base,
   ce qui alourdit sensiblement une installation sur petite machine.
-- ✅ Port d'écoute par variable d'environnement `PORT`.
+- ✅ Port d'écoute par variable d'environnement `APP_PORT`.
 - 🆕 Sauvegarde / restauration de la configuration.
 
 ## 12. Utilisateurs & authentification

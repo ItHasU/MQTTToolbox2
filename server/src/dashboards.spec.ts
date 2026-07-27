@@ -41,13 +41,13 @@ describe.runIf(available)("Dashboards — ownership and sharing", () => {
 
         const url = new URL(TEST_DB_URL);
         url.searchParams.set("options", `-c search_path=${db.schema}`);
-        process.env["PORT"] = "0";
-        process.env["BASE_URL"] = "http://localhost";
-        process.env["DB_URL"] = url.toString();
+        process.env["APP_PORT"] = "0";
+        process.env["APP_BASE_URL"] = "http://localhost";
+        process.env["APP_DATABASE_URL"] = url.toString();
         // A settings encryption key is mandatory the moment a secret setting
         // is declared (Dagda FEATURES §11.5) — mqtt.password is one. Must
         // decode to exactly 32 bytes, unlike the session secret.
-        process.env["SECRET_KEY"] = "glUGBe5xyLTagSXb4SFa3oQBxeVoqVymDlqy9lDSEO0=";
+        process.env["APP_SECRET"] = "glUGBe5xyLTagSXb4SFa3oQBxeVoqVymDlqy9lDSEO0=";
 
         // Dynamic imports, after the env vars above are set: the app's model
         // and settings modules have no side effects reading them, but this

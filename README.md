@@ -32,7 +32,7 @@ cp .env.example .env
 # Obligatoire : protège les paramètres secrets au repos. Le serveur refuse
 # de démarrer sans, et la configuration du broker en contient un.
 node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
-# → à reporter dans SECRET_KEY dans .env
+# → à reporter dans APP_SECRET dans .env
 
 npm run dev            # base + broker + compilation continue + serveur
 ```

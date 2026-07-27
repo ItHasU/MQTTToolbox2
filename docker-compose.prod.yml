@@ -10,20 +10,27 @@
 # for the full walkthrough (pulling a private ghcr.io image, first login,
 # configuring the broker — that one's a system setting edited from the
 # Paramètres screen after first boot, not an environment variable: only
-# PORT/BASE_URL/DB_URL/SECRET_KEY are bootstrap, see .env.prod.example).
+# APP_PORT/APP_BASE_URL/APP_DATABASE_URL/APP_SECRET are bootstrap, see
+# .env.prod.example).
+#
+# The app only ever reads those four fixed names (Dagda standard, no
+# per-app override) — the MQTT_-prefixed variables below are this compose
+# file's own deployment knobs, translated into them here rather than
+# passed straight through. APP_PORT is fixed at 3000, the container's own
+# listening port (matching EXPOSE in the Dockerfile) — MQTT_PORT is only
+# the *host* side of the ports mapping below, and the two may differ.
 
 services:
-
   app:
-    image: ghcr.io/ithasu/mqtttoolbox2:${MQTT_IMAGE_TAG:-spec-reboot}
+    image: ghcr.io/ithasu/mqtttoolbox2:mail
     restart: unless-stopped
     ports:
       - "${MQTT_PORT:-3000}:3000"
     environment:
-      PORT: 3000
-      BASE_URL: ${MQTT_BASE_URL:?set MQTT_BASE_URL in .env.prod}
-      DB_URL: postgresql://${MQTT_DB_USER:-mqtt}:${MQTT_DB_PASSWORD:-mqtt}@postgres:5432/${MQTT_DB_NAME:-mqtt}
-      SECRET_KEY: ${MQTT_SECRET_KEY:?set MQTT_SECRET_KEY in .env.prod — see the generation command in .env.prod.example}
+      APP_PORT: "3000"
+      APP_BASE_URL: ${MQTT_BASE_URL}
+      APP_DATABASE_URL: postgresql://${MQTT_DB_USER:-mqtt}:${MQTT_DB_PASSWORD:-mqtt}@postgres:5432/${MQTT_DB_NAME:-mqtt}
+      APP_SECRET: ${MQTT_SECRET_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,7 +48,11 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${MQTT_DB_USER:-mqtt} -d ${MQTT_DB_NAME:-mqtt}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${MQTT_DB_USER:-mqtt} -d ${MQTT_DB_NAME:-mqtt}",
+        ]
       interval: 2s
       timeout: 3s
       retries: 30
