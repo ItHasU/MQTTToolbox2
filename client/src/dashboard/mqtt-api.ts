@@ -38,7 +38,7 @@ export interface MqttService {
  * about *where* it's exposed, only about what it does).
  *
  * Read-only by design (review feedback): publishing/scheduling is
- * `dagda.routes.publishMessage(...)` etc. directly — the same console/
+ * `dagda.api.publishMessage(...)` etc. directly — the same console/
  * script-facing RPC surface every other route uses, not a second one
  * special-cased to dashboards. `window.dagda` is installed app-wide, not
  * scoped to the dashboard page, so a dashboard script reaches it exactly the

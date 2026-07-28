@@ -25,7 +25,7 @@ const SNIPPETS: Snippet[] = [
     { label: "Date du dernier message", html: '<mqtt-date topic="a/b"></mqtt-date>' },
     { label: "Ancienneté", html: '<mqtt-age topic="a/b" unit="auto"></mqtt-age>' },
     { label: "Affichage conditionnel", html: '<mqtt-if topic="a/b" path="state" equals="on">\n    Allumé\n</mqtt-if>' },
-    { label: "Publier depuis un script", html: '<button onclick="dagda.routes.publishMessage({topic: \'a/b\', payload: \'1\'})">Publier</button>' }
+    { label: "Publier depuis un script", html: '<button onclick="dagda.api.publishMessage({topic: \'a/b\', payload: \'1\'})">Publier</button>' }
 ];
 
 /**
