@@ -1,6 +1,7 @@
 import { DagdaClient } from "@dagda/client/src/app";
 import { APP_CONTEXT_ADAPTER } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
+import { APP_PERMISSIONS } from "@mqtt-toolbox/shared/src/permissions";
 import { APP_SETTINGS } from "@mqtt-toolbox/shared/src/settings";
 import { AppClientTypes, AppDagda, _setDagda } from "./dagda";
 import { MqttApi } from "./dashboard/mqtt-api";
@@ -33,6 +34,11 @@ DagdaClient.start<AppClientTypes>({
     // the framework register its default Settings page (Dagda
     // pages/defaults.ts); no local Settings entry needed in `pages:` below.
     settings: APP_SETTINGS,
+    // The app's own permissions (Dagda FEATURES §7.1), merged into
+    // dagda.permissions next to the framework's — what makes the Rôles page
+    // show dashboards.edit/publish.send alongside users.manage/roles.manage/
+    // settings.manage instead of only the framework's own three.
+    permissions: APP_PERMISSIONS,
     // The dashboard JS API (Dagda ROADMAP tranche 4, FEATURES §6.2) — one
     // instance for the whole session, reachable via dagda.mqtt from any
     // component, loaded lazily (ensureLoaded()) the first time a dashboard
