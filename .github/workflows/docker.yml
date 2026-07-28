@@ -7,6 +7,9 @@ name: Docker
 on:
   push:
     branches: ["**"]
+  # Dagda-only changes (no push here) never trigger this workflow on their
+  # own — this lets us rebuild against Dagda's current branch tip by hand.
+  workflow_dispatch:
 
 jobs:
   build-and-push:
