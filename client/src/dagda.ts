@@ -7,6 +7,8 @@ import { AppPages } from "./pages";
 /** The application's contract, `pages` included (FEATURES §0) */
 export interface AppClientTypes extends AppTypes {
     pages: AppPages;
+    /** No model functions declared — nothing to act on the data model with yet */
+    model: {};
 }
 
 /** The application's own dagda: the framework's `ClientDagda` plus the dashboard's `mqtt` API */
