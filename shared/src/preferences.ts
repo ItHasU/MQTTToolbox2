@@ -6,14 +6,15 @@ import { PreferencesModel } from "@dagda/shared/src/preferences/model";
  * preference this app declares; the mechanism itself has existed since
  * tranche 3 with nothing using it yet.
  *
- * An enum, not a plain string: the two ids here must match the
- * `[data-theme="…"]` blocks Dagda's own `themes.css` declares (there is no
- * third one for this app to add of its own), so a typo is a compile error,
- * not a theme that silently falls back to the default.
+ * An enum, not a plain string: the ids here must match the
+ * `[data-theme="…"]` blocks Dagda's own `themes.css` declares (there is
+ * none for this app to add of its own), so a typo is a compile error, not a
+ * theme that silently falls back to the default.
  */
 const THEME_ID = EntitiesModel.enum({
     NOCTURNE: { value: "nocturne", label: "Nocturne" },
-    AURORE: { value: "aurore", label: "Aurore" }
+    AURORE: { value: "aurore", label: "Aurore" },
+    FRENCHY: { value: "frenchy", label: "Frenchy" }
 });
 
 /**
