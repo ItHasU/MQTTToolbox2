@@ -3,14 +3,10 @@ import { Attribute, NumberMarshaller, Ref } from "@dagda/client/src/components/a
 import { showToast } from "@dagda/client/src/components/toast/toast.component";
 import { FieldEditor } from "@dagda/client/src/forms/editors";
 import { AbstractPageElement } from "@dagda/client/src/pages/abstract.page.element";
-import { PageService } from "@dagda/client/src/pages/service";
-import { Dagda } from "@dagda/shared/src/dagda";
-import { EntitiesService } from "@dagda/shared/src/entities/service";
 import { asNamed } from "@dagda/shared/src/entities/tools/named";
 import { AppActions } from "@mqtt-toolbox/shared/src/actions";
-import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { MESSAGE_SOURCE } from "@mqtt-toolbox/shared/src/entities/model";
-import { AppEntityTypes } from "@mqtt-toolbox/shared/src/entities/types";
+import { dagda } from "../../dagda";
 import template from "./topic-history.page.html";
 
 /**
@@ -49,7 +45,7 @@ export class TopicHistoryPage extends AbstractPageElement {
 
     protected override async _init(): Promise<void> {
         this._back.addEventListener("click", () => {
-            Dagda.get<PageService>("pages").setPage("status").catch(console.error);
+            dagda.pages.setPage("status").catch(console.error);
         });
 
         this._quickPublish.addEventListener("submit", (event) => {
@@ -81,7 +77,7 @@ export class TopicHistoryPage extends AbstractPageElement {
             return;
         }
 
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         await entities.getHandler().fetch(
             { type: "topics", options: undefined },
             { type: "topic", options: { topicId: asNamed<"TOPIC_ID", number>(topicId) } }

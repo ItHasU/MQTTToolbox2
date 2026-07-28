@@ -1,10 +1,10 @@
 import { AbstractWebComponent, Attribute, WebComponentOptions } from "@dagda/client/src/components/abstract.webcomponent";
-import { Dagda } from "@dagda/shared/src/dagda";
-import { MqttService, MqttValue } from "../mqtt-api";
+import { dagda } from "../../dagda";
+import { MqttValue } from "../mqtt-api";
 
 /**
  * Shared behaviour of the five dashboard components (Dagda ROADMAP tranche
- * 4, FEATURES §6.1): read `topic`, wait for `Dagda.get<MqttService>("mqtt")` to
+ * 4, FEATURES §6.1): read `topic`, wait for `dagda.mqtt` to
  * have an initial value, re-render on every live update, unsubscribe on
  * disconnect.
  *
@@ -25,7 +25,7 @@ export abstract class AbstractMqttComponent extends AbstractWebComponent {
     }
 
     protected override async _init(): Promise<void> {
-        const mqtt = Dagda.get<MqttService>("mqtt");
+        const mqtt = dagda.mqtt;
         await mqtt.ensureLoaded();
         if (this._topic != null) {
             this._unsubscribe = mqtt.on(this._topic, () => {
@@ -42,12 +42,12 @@ export abstract class AbstractMqttComponent extends AbstractWebComponent {
 
     /** The current payload of `topic` (parsed JSON when it reads as JSON), or undefined before it's known or without a topic */
     protected _value(): unknown {
-        return this._topic == null ? undefined : Dagda.get<MqttService>("mqtt").get(this._topic);
+        return this._topic == null ? undefined : dagda.mqtt.get(this._topic);
     }
 
     /** The full record — `receivedAt` included — for the components that need more than the plain value */
     protected _record(): MqttValue | undefined {
-        return this._topic == null ? undefined : Dagda.get<MqttService>("mqtt").getValue(this._topic);
+        return this._topic == null ? undefined : dagda.mqtt.getValue(this._topic);
     }
 
 }

@@ -1,11 +1,10 @@
 import { DagdaClient } from "@dagda/client/src/app";
-import { AppTypes } from "@mqtt-toolbox/shared/src/app/types";
 import { APP_CONTEXT_ADAPTER } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { APP_MODEL } from "@mqtt-toolbox/shared/src/entities/model";
 import { APP_SETTINGS } from "@mqtt-toolbox/shared/src/settings";
+import { AppClientTypes, AppDagda, _setDagda } from "./dagda";
 import { MqttApi } from "./dashboard/mqtt-api";
 import { registerAppFieldEditors } from "./forms/defaults";
-import { AppPages } from "./pages";
 import { DashboardPage } from "./pages/dashboard/dashboard.page";
 import { PublishPage } from "./pages/publish/publish.page";
 import { StatusPage } from "./pages/status/status.page";
@@ -18,7 +17,7 @@ import { TopicHistoryPage } from "./pages/topic-history/topic-history.page";
 // editors as custom elements the moment it renders (Dagda FEATURES §8.1).
 registerAppFieldEditors();
 
-DagdaClient.start<AppTypes, AppPages>({
+DagdaClient.start<AppClientTypes>({
     title: "MQTT Toolbox",
     model: APP_MODEL,
     contextAdapter: APP_CONTEXT_ADAPTER,
@@ -35,11 +34,13 @@ DagdaClient.start<AppTypes, AppPages>({
     // pages/defaults.ts); no local Settings entry needed in `pages:` below.
     settings: APP_SETTINGS,
     // The dashboard JS API (Dagda ROADMAP tranche 4, FEATURES §6.2) — one
-    // instance for the whole session, reachable via Dagda.get("mqtt") from
-    // any component, loaded lazily (ensureLoaded()) the first time a
-    // dashboard actually needs it rather than at bootstrap.
-    services: {
-        mqtt: new MqttApi()
+    // instance for the whole session, reachable via dagda.mqtt from any
+    // component, loaded lazily (ensureLoaded()) the first time a dashboard
+    // actually needs it rather than at bootstrap.
+    buildDagda: (params) => {
+        const instance = new AppDagda({ ...params, mqtt: new MqttApi() });
+        _setDagda(instance);
+        return instance;
     },
     // One page in the menu for now, so it stands on its own rather than under
     // a section of one. Sections arrive with the pages that need them.

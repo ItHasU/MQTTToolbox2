@@ -3,11 +3,9 @@ import { Ref } from "@dagda/client/src/components/abstract.webcomponent";
 import { showToast } from "@dagda/client/src/components/toast/toast.component";
 import { EnumFieldEditor, FieldEditor } from "@dagda/client/src/forms/editors";
 import { AbstractPageElement } from "@dagda/client/src/pages/abstract.page.element";
-import { Dagda } from "@dagda/shared/src/dagda";
-import { NotificationService } from "@dagda/shared/src/notification/service";
 import { Event } from "@dagda/shared/src/tools/events";
 import { AppActions, QOS, ScheduledPublish } from "@mqtt-toolbox/shared/src/actions";
-import { AppNotifications } from "@mqtt-toolbox/shared/src/services";
+import { dagda } from "../../dagda";
 import { DateTimeFieldEditor } from "../../forms/editors/datetime.editor";
 import template from "./publish.page.html";
 
@@ -72,7 +70,7 @@ export class PublishPage extends AbstractPageElement {
         // Kept live rather than re-fetched on every refresh (FEATURES §9):
         // a message firing on its own schedule, with nobody on this page at
         // the time, must still leave the list correct once someone is.
-        Dagda.get<NotificationService<AppNotifications>>("notification")
+        dagda.notification
             .on("scheduledPublishesChanged", (event: Event<ScheduledPublish[]>) => {
                 this._pending = event.data;
                 this._renderPending();

@@ -1,11 +1,6 @@
-import { Dagda } from "@dagda/shared/src/dagda";
-import { EntitiesService } from "@dagda/shared/src/entities/service";
-import { NotificationService } from "@dagda/shared/src/notification/service";
 import { EventListener } from "@dagda/shared/src/tools/events";
-import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
 import { IngestedMessage } from "@mqtt-toolbox/shared/src/entities/events";
-import { AppEntityTypes } from "@mqtt-toolbox/shared/src/entities/types";
-import { AppNotifications } from "@mqtt-toolbox/shared/src/services";
+import { dagda } from "../dagda";
 
 /** The current value of a topic, as `MQTT.get`/`getAll`/`on` (FEATURES §6.2) hand it over */
 export interface MqttValue {
@@ -30,14 +25,14 @@ function toValue(topic: string, message: { payload: string, payloadIsBase64: boo
     return { topic, payload, raw: message.payload, payloadIsBase64: message.payloadIsBase64, receivedAt: message.receivedAt };
 }
 
-/** What `Dagda.get<MqttService>("mqtt")` exposes */
+/** What `dagda.mqtt` exposes */
 export interface MqttService {
     mqtt: MqttApi;
 }
 
 /**
  * The dashboard's JavaScript API (Dagda ROADMAP tranche 4, FEATURES §6.2) —
- * `window.MQTT` in v1, `Dagda.get<MqttService>("mqtt")` here, aliased to
+ * `window.MQTT` in v1, `dagda.mqtt` here, aliased to
  * `window.MQTT` only while a dashboard's own HTML/JS is what's running (the
  * dashboard page does that, not this class — this class has no opinion
  * about *where* it's exposed, only about what it does).
@@ -66,7 +61,7 @@ export class MqttApi {
     }
 
     protected async _load(): Promise<void> {
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         await entities.getHandler().fetch({ type: "lastMessages", options: undefined });
 
         const handler = entities.getHandler();
@@ -86,7 +81,7 @@ export class MqttApi {
                 }
             }
         };
-        Dagda.get<NotificationService<AppNotifications>>("notification").on("messagesIngested", listener);
+        dagda.notification.on("messagesIngested", listener);
     }
 
     /** The current value of a topic, or undefined if it has never been seen */

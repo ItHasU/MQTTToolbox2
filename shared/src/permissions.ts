@@ -1,4 +1,4 @@
-import { PermissionsDeclaration } from "@dagda/shared/src/auth/permissions";
+import { DagdaPermission, PermissionsDeclaration } from "@dagda/shared/src/auth/permissions";
 
 /**
  * Permissions declared by this application, on top of Dagda's own
@@ -22,3 +22,6 @@ export const APP_PERMISSIONS = {
         description: "Envoyer un message immédiatement ou le planifier, et gérer la file d'attente des envois différés"
     }
 } as const satisfies PermissionsDeclaration;
+
+/** Every permission this application may check — the framework's own plus its own (FEATURES §0) */
+export type AppPermission = DagdaPermission | keyof typeof APP_PERMISSIONS;

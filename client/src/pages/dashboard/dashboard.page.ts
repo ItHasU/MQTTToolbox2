@@ -2,16 +2,10 @@ import { Attribute, Ref } from "@dagda/client/src/components/abstract.webcompone
 import { DialogAction, openDialog } from "@dagda/client/src/components/dialog/dialog.component";
 import { showToast } from "@dagda/client/src/components/toast/toast.component";
 import { CodeEditor } from "@dagda/client/src/editor/editor.component";
-import { AuthService } from "@dagda/client/src/auth/auth.service";
 import { AbstractPageElement } from "@dagda/client/src/pages/abstract.page.element";
-import { PageService } from "@dagda/client/src/pages/service";
-import { UsersService } from "@dagda/client/src/auth/service";
-import { Dagda } from "@dagda/shared/src/dagda";
-import { EntitiesService } from "@dagda/shared/src/entities/service";
 import { asNamed } from "@dagda/shared/src/entities/tools/named";
-import { AppContexts } from "@mqtt-toolbox/shared/src/entities/contexts";
-import { AppEntityTypes, DashboardEntity, DashboardShareEntity } from "@mqtt-toolbox/shared/src/entities/types";
-import { MqttService } from "../../dashboard/mqtt-api";
+import { DashboardEntity, DashboardShareEntity } from "@mqtt-toolbox/shared/src/entities/types";
+import { dagda } from "../../dagda";
 // Registers <dagda-code-editor>'s custom element and the five dashboard
 // components, side-effect only — the same idiom as registerAppFieldEditors().
 import "@dagda/client/src/editor/editor.component";
@@ -113,7 +107,7 @@ export class DashboardPage extends AbstractPageElement {
 
     protected override async _init(): Promise<void> {
         // The dashboard's own <script> blocks read this — see mqtt-api.ts.
-        (window as unknown as { MQTT: unknown }).MQTT = Dagda.get<MqttService>("mqtt");
+        (window as unknown as { MQTT: unknown }).MQTT = dagda.mqtt;
 
         this._add.addEventListener("click", () => this._createDashboard().catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err))));
         this._browse.addEventListener("click", () => this._openBrowseDialog().catch((err: unknown) => showToast(err instanceof Error ? err.message : String(err))));
@@ -188,7 +182,7 @@ export class DashboardPage extends AbstractPageElement {
     //#region Data ---------------------------------------------------------
 
     protected async _loadDashboards(): Promise<DashboardEntity[]> {
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         await entities.getHandler().fetch({ type: "dashboards", options: undefined });
         return entities.getHandler().getItems("dashboards").slice().sort((a, b) => a.sortOrder - b.sortOrder);
     }
@@ -198,7 +192,7 @@ export class DashboardPage extends AbstractPageElement {
     }
 
     protected _isOwner(dashboard: DashboardEntity | null): boolean {
-        const user = Dagda.get<AuthService>("auth").currentUser;
+        const user = dagda.auth.currentUser;
         return dashboard != null && user != null && (dashboard.ownerId === user.id || user.isSuperAdmin);
     }
 
@@ -208,7 +202,7 @@ export class DashboardPage extends AbstractPageElement {
 
     protected _renderTabs(dashboards: DashboardEntity[]): void {
         this._tabs.replaceChildren();
-        const user = Dagda.get<AuthService>("auth").currentUser;
+        const user = dagda.auth.currentUser;
         for (const dashboard of dashboards) {
             const button = document.createElement("button");
             button.type = "button";
@@ -282,7 +276,7 @@ export class DashboardPage extends AbstractPageElement {
         // Records the choice in the URL without a new history entry — a
         // dashboard is in-page state of the same page, not a navigation
         // (Dagda ROADMAP tranche 4: PageHandler.replaceParams()).
-        Dagda.get<PageService>("pages").replaceParams({ "dashboard-id": String(id) });
+        dagda.pages.replaceParams({ "dashboard-id": String(id) });
         this.refresh().catch((err: unknown) => console.error("Error refreshing the dashboard page", err));
     }
 
@@ -347,9 +341,9 @@ export class DashboardPage extends AbstractPageElement {
     }
 
     protected async _createDashboard(): Promise<void> {
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         const handler = entities.getHandler();
-        const user = Dagda.get<AuthService>("auth").currentUser;
+        const user = dagda.auth.currentUser;
         const dashboards = await this._loadDashboards();
 
         let tempId: number | null = null;
@@ -393,7 +387,7 @@ export class DashboardPage extends AbstractPageElement {
             showToast("Le nom du tableau de bord ne peut pas être vide.");
             return;
         }
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         const handler = entities.getHandler();
         await handler.withTransaction((tr) => {
             tr.update("dashboards", current, { name: asNamed(name), html: asNamed(this._editor.value ?? "") });
@@ -418,7 +412,7 @@ export class DashboardPage extends AbstractPageElement {
                     if (current == null) {
                         return;
                     }
-                    const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+                    const entities = dagda.entities;
                     const handler = entities.getHandler();
                     await handler.withTransaction((tr) => {
                         tr.delete("dashboards", current.id);
@@ -452,11 +446,11 @@ export class DashboardPage extends AbstractPageElement {
                 onClick: async () => {
                     const dashboards = await this._loadDashboards();
                     const current = this._currentDashboard(dashboards);
-                    const user = Dagda.get<AuthService>("auth").currentUser;
+                    const user = dagda.auth.currentUser;
                     if (current == null || user == null) {
                         return;
                     }
-                    const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+                    const entities = dagda.entities;
                     const myShare = entities.getHandler().getItems("dashboard_shares")
                         .find((s) => s.dashboardId === current.id && s.userId === user.id);
                     if (myShare == null) {
@@ -490,9 +484,9 @@ export class DashboardPage extends AbstractPageElement {
             return;
         }
 
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         const shares = entities.getHandler().getItems("dashboard_shares").filter((s) => s.dashboardId === current.id);
-        const users = Dagda.get<UsersService>("users");
+        const users = dagda.users;
 
         const body = document.createElement("div");
 
@@ -538,7 +532,7 @@ export class DashboardPage extends AbstractPageElement {
     }
 
     protected async _setPublic(dashboard: DashboardEntity, isPublic: boolean): Promise<void> {
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         const handler = entities.getHandler();
         await handler.withTransaction((tr) => {
             tr.update("dashboards", dashboard, { isPublic: asNamed(isPublic) });
@@ -549,7 +543,7 @@ export class DashboardPage extends AbstractPageElement {
     }
 
     protected async _unshare(share: DashboardShareEntity): Promise<void> {
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         const handler = entities.getHandler();
         await handler.withTransaction((tr) => {
             tr.delete("dashboard_shares", share.id);
@@ -575,10 +569,10 @@ export class DashboardPage extends AbstractPageElement {
      * dashboard shared this way has always had (no permission needed).
      */
     protected async _openBrowseDialog(): Promise<void> {
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         const handler = entities.getHandler();
         await handler.fetch({ type: "publicDashboards", options: undefined });
-        const user = Dagda.get<AuthService>("auth").currentUser;
+        const user = dagda.auth.currentUser;
         // `getItems("dashboards")` reads the whole shared entity cache, not
         // just what this fetch just returned — it still holds every
         // dashboard an earlier `{type: "dashboards"}` fetch cached, owned or
@@ -626,11 +620,11 @@ export class DashboardPage extends AbstractPageElement {
     }
 
     protected async _importDashboard(dashboard: DashboardEntity): Promise<void> {
-        const user = Dagda.get<AuthService>("auth").currentUser;
+        const user = dagda.auth.currentUser;
         if (user == null) {
             return;
         }
-        const entities = Dagda.get<EntitiesService<AppEntityTypes, AppContexts>>("entities");
+        const entities = dagda.entities;
         const handler = entities.getHandler();
         await handler.withTransaction((tr) => {
             const item: DashboardShareEntity = {
