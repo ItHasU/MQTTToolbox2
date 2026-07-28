@@ -1,43 +1,66 @@
-Faisons maintenant une petite phase de refactor, voici mes remarques :
+# Dagda
 
-## Dagda
-* [x] Déplace toutes les pages qui ne sont pas spécifiques à l'application dans le framework (Préférences, gestion des utilisateurs, ...)
-* [x] Met le style des pages à côté de leur html et ts
+## Services (refactor)
 
-## API
-* [x] Depuis la console, distinguer :
-  * dagda.routes.xxx() => Appel d'une route
-  * dagda.actions.xxx(tr, ...) => Appel d'une fonction modifiant les entités
-  * et fournir une méthode encapsulate(async (tr) => {}) pour les actions
-* [x] Faire en sorte que dagda.routes soit enumerable pour avoir la completion dans la console
-* [x] Ajouter un message de bienvenue expliquant les bases de ce que l'on peut faire dans la console
-* [x] Ajouter une fonction dagda.help() qui affiche le détail des fonctions disponibles (le texte est fourni par le développeur quand il enregistre les routes/actions)
-* [x] Supprimer MQTT.publish, le but c'est d'utiliser data.routes.publish()
+* [ ] Maintenant que la liste de services est constante, ne pas mettre get() utiliser les services, plutôt les exposer directement (soit avec un proxy, soit mettre toutes les variables directement)
+* [ ] Uniformiser l'accès côté client / script / serveur : "dagda", "Dagda" => "dagda"
+  * On garde la classe utilitaire "Dagda" contenant des méthodes statiques
+  * On créer une variable globale "dagda" côté client/serveur/script constante qui contient la version "typée" de la classe initialisée
+* [ ] Les permissions doivent faire partie des types de base
+* [ ] UserInfos.permissions devrait être du type des permissions de l'app, pas juste un string.
 
-## UI
-* [x] Ne pas mettre tous les toasts en rouge. Distinguer si ça se passe bien (success), si ça se passe mal (danger), si c'est une information (primary).
-* [x] Menu de navigation : Laisse l'icône plier / déplier au même endroit (à gauche) pour ne pas qu'elle bouge quand on déplie
-* [x] Si possible, met le thème dans les préférences utilisateur (déjà le cas depuis la tranche 4 — le sélecteur de thème vit sur la page Préférences)
+## UI (small changes)
 
-## Editeur Monaco
-* [x] Dans l'éditeur binder les raccourcis claviers (Cmd + Ctrl S) depuis l'éditeur + le menu des actions (F1, Cmd-P, Ctrl-P) — Cmd/Ctrl+S câblé ; F1/Cmd-P/Ctrl-P sont déjà les défauts Monaco, rien ne les désactivait
-* [ ] Activer la completion HTML pour les dashboard (si possible permettre la completion avec les balises existantes) — **reporté**, voir note en bas de fichier
-* [x] Utiliser un thème adapté au thème choisi par l'utilisateur (pas besoin qu'il soit identique)
+* [ ] Ajouter des variantes de couleur success, info, warning, danger
+* [ ] Créer des classes utilitaire pour l'espacement m-x, p-x
+* [ ] Crée un thème "Frenchy" sur une base de couleurs "bleu-blanc-rouge" avec un bleu plutôt bleu marine
+* [ ] Gère la navigation avec les boutons de navigation du navigateur
 
-## Dashboard
-* [x] Le partage doit être public (on partage un dashboard pour tout le monde)
-* [x] Chaque utilisateur doit pouvoir importer ou non un dashboard partagé
-* [x] Le bouton éditer ne doit pas être disponible tant qu'on n'a pas de dashboard
-* [x] Seul le propriétaire du dashboard peut l'éditer
+## Page - Edition des utilisateurs (small changes)
 
-## Page publier
-* [x] Supprimer l'entrée QoS vide (ça ne marche pas quand on la sélectionne)
+* [ ] Permettre de modifier le flag super-utilisateurs sur les utilisateurs
+* [ ] Permettre de renommer un utilisateur
 
-## Permissions
-* [x] Ajoute des permissions pour toutes les pages & actions de l'application — voir note en bas de fichier
+## Page - Edition des rôles (small changes)
 
----
+* [ ] Ne pas mettre la liste de rôle lors de la création (juste demander le nom)
+* [ ] Permettre un scroll horizontal quand on a beaucoup de rôles
 
-**Notes de fin de phase :**
-- Completion HTML Monaco pour les tags de dashboard : reporté. Le fournisseur de complétion HTML de Monaco ne branche pas facilement sur une liste de tags custom sans un module dédié (idempotence de `registerCompletionItemProvider`, liste de tags à faire remonter depuis l'app) — à reprendre dans une prochaine passe si toujours utile.
-- Permissions : la vraie faille était les 4 actions de publication (`publishMessage`/`schedulePublish`/`cancelScheduledPublish`/`listScheduledPublishes`), qui n'avaient aucune vérification serveur — corrigé avec un nouveau `publish.send`. Les pages `status`/`topicHistory`/`dashboard` (lecture) et `préférences` (personnel) restent volontairement ouvertes à tout compte authentifié, même principe que `listUserNames()` — pas de permission ajoutée pour elles, cohérent avec ce qui existait déjà avant cette passe.
+## API (refactor)
+
+* [ ] Faisons la distinction entre l'API standard de dagda (infos system, fetch, submit, ...)
+  * Mettons les routes système dans dagda.system.xxx()
+  * Mettons les routes personnalisées dans dagda.api.xxx()
+  * Les routes systèmes et personnalisées doivent être énumérables depuis la console
+* [ ] Les apis pourront à terme être appelées depuis :
+  * Le client
+  * Le serveur lui même (appel de la fonction en direct)
+  * Les scripts utilisateur
+  * Appel HTTP externe (par exemple avec curl) en utilisant un token lié à l'utilisateur
+* [ ] Sécurisation
+  * La configuration de l'API contiendra un type INTERNAL (client, serveur, scripts - par défaut) / EXTERNAL (API) / BOTH
+  * Chaque API peut être liée à une fonction de permission qui évalue si l'utilisateur a le droit d'exécuter la fonction selon ses permissions et les paramètres de la fonction (par exemple : il peut avoir le droit de faire une action sur ses entités mais pas sur celles des autres utilisateurs)
+
+## Actions (refactor)
+
+Concepts clés de la manipulation d'entités :
+* Toutes les manipulations sur les entités (lecture, modification via les transactions) sont synchrones.
+* La méthode encapsulate permet d'avoir une transaction pour faire des modifications, mais est elle aussi synchrone.
+* Si jamais on veut réellement attendre que les modifications soient réalisées par le serveur, il existe une méthode d'attente.
+* Les fetch d'entités sont toujours fait en dehors des manipulations sur le modèle. C'est au développeur de faire les bons fetch au moment du refresh de la page.
+
+* [ ] Renommer actions -> model, ce sont des fonctions qui vont permettre d'agir sur le modèle de données
+  * Soit en récupérant des informations depuis le cache (soit les entités, soit une valeur calculée à partir des entités)
+  * Soit en modifiant les entités (succession de modifications appliquées sur les entités grâce à une transaction)
+  * Le "model" doit être typé de manière à ce qu'on ait de la completion dans VSCode en TypeScript
+  * La liste des fonctions doit être itérable côté client (même si on utilise un proxy) pour qu'on ait de la completion dans la console du navigateur
+
+# MQTTToolbox 2
+
+## Dashboard (small changes)
+
+* [ ] L'éditeur de dashboard ne fait pas de coloration sur le HTML
+
+## Intégration framework (refactor ?)
+
+* [ ] Ajouter les permissions de l'application dans la page de gestion des rôles
